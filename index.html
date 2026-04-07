@@ -1689,7 +1689,7 @@ async function obAILookup(){
 
     saveState();
     showToast('✓ Found data for '+make+' '+model,'ok');
-    S.obStep=4;go('onboarding');
+    S.obStep=5;go('onboarding');
 
   }catch(e){
     showToast('AI lookup failed — try uploading your POH or entering manually','error');
@@ -1834,7 +1834,7 @@ async function extractFromPOH(file){
     if(prog)prog.appendChild(successMsg);
 
     saveState();
-    setTimeout(function(){S.obStep=4;go('onboarding');},missing.length?2000:800);
+    setTimeout(function(){S.obStep=5;go('onboarding');},missing.length?2000:800);
 
   }catch(err){
     clearInterval(ticker);
@@ -11153,25 +11153,21 @@ function dashWidget_ownerExpenses(){
   // ── Gather all expense sources ────────────────────────────────
   var allExpenses = getAllExpenses();
 
-  // ── Build owner list: coOwners + pilot if not already included ─
-  var owners = (S.coOwners||[]).filter(function(o){return o.name&&o.name.trim();})
-    .map(function(o){return {name:o.name.trim(), share:parseFloat(o.share)||0};});
+  // ── Build owner list: only coOwners with owner roles ──────────
+  var owners = (S.coOwners||[]).filter(function(o){
+    return o.name && o.name.trim() &&
+           (o.role==='owner_admin'||o.role==='owner_viewer'||!o.role);
+  }).map(function(o){return {name:o.name.trim(), share:parseFloat(o.share)||0};});
 
-  // Always include the main pilot
-  var pilotName = (S.pilot.name||'You').trim();
-  if(!owners.find(function(o){return o.name.toLowerCase()===pilotName.toLowerCase();})){
-    owners.unshift({name:pilotName, share:0});
+  // If no co-owners set up, fall back to pilot only
+  if(!owners.length){
+    owners=[{name:(S.pilot.name||'You').trim(), share:100}];
   }
-
-  // If no owners at all, use "You"
-  if(!owners.length) owners=[{name:'You', share:100}];
 
   // ── Compute monthly + annual totals per owner ─────────────────
   function ownerMatch(expOwner, ownerName){
     if(!expOwner) return false;
-    var e = expOwner.toLowerCase().trim();
-    var o = ownerName.toLowerCase().trim();
-    return e===o || e.indexOf(o)>=0 || o.indexOf(e)>=0;
+    return expOwner.toLowerCase().trim() === ownerName.toLowerCase().trim();
   }
 
   var ownerColors = ['#0BA5B0','#6366F1','#F59E0B','#22C55E','#EF4444','#EC4899'];
