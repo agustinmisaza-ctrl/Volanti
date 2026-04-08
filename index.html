@@ -17,7 +17,7 @@
 <meta http-equiv="Expires" content="0">
 <meta name="theme-color" content="#060E18">
 <!-- iOS touch icon — compass rose on midnight -->
-<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 110 110'%3E%3Crect width='110' height='110' rx='24' fill='%23060E18'/%3E%3Ccircle cx='55' cy='55' r='46' stroke='%230BA5B0' stroke-width='2' fill='none' opacity='0.5'/%3E%3Cline x1='55' y1='9' x2='55' y2='19' stroke='%230BA5B0' stroke-width='3' opacity='0.7'/%3E%3Cline x1='55' y1='91' x2='55' y2='101' stroke='%230BA5B0' stroke-width='3' opacity='0.7'/%3E%3Cline x1='9' y1='55' x2='19' y2='55' stroke='%230BA5B0' stroke-width='3' opacity='0.7'/%3E%3Cline x1='91' y1='55' x2='101' y2='55' stroke='%230BA5B0' stroke-width='3' opacity='0.7'/%3E%3Cpath d='M55 82 L22 28 L33 28 L55 68 L77 28 L88 28 Z' fill='%230BA5B0'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 110 110'%3E%3Crect width='110' height='110' rx='24' fill='%23060E18'/%3E%3Ccircle cx='55' cy='55' r='46' stroke='%230BA5B0' stroke-width='2' fill='none' opacity='0.5'/%3E%3Cline x1='55' y1='9' x2='55' y2='19' stroke='%230BA5B0' stroke-width='3' opacity='0.7'/%3E%3Cline x1='55' y1='91' x2='55' y2='101' stroke='%230BA5B0' stroke-width='3' opacity='0.7'/%3E%3Cline x1='9' y1='55' x2='19' y2='55' stroke='%230BA5B0' stroke-width='3' opacity='0.7'/%3E%3Cline x1='91' y1='55' x2='101' y2='55' stroke='%230BA5B0' stroke-width='3' opacity='0.7'/%3E%3Cpath d='M55 82 L22 28 L33 28 L55 68 L77 28 L88 28 Z' fill='%23DC2626'/%3E%3C/svg%3E">
 <link rel="manifest" id="pwa-manifest">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <style>
@@ -36,7 +36,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .sbi{color:rgba(255,255,255,.6);font-size:11px}
 .scr{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
 .scr::-webkit-scrollbar{display:none}
-.nb{background:var(--card);border-top:.5px solid var(--bd);display:flex;flex-shrink:0;padding:4px 0 8px;gap:0}
+.nb{background:var(--card);border-top:.5px solid var(--bd);display:flex;flex-shrink:0;padding:4px 0 calc(8px + env(safe-area-inset-bottom));gap:0;position:relative;z-index:100}
+.nb .ni{flex:1;min-width:0;overflow:hidden}
 .ni{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 2px 0;cursor:pointer;border:none;background:none;position:relative;-webkit-tap-highlight-color:transparent}
 .ni-ico{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;transition:background .15s,transform .12s}
 .nii{font-size:18px;line-height:1}
@@ -581,7 +582,7 @@ body.dash-editing .acbanner{outline:2px solid rgba(11,165,176,.4)}
     </button>
     <span class="sbt" id="clk">9:41</span>
     <div id="sb-center" style="display:flex;align-items:center;gap:7px">
-      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 110 110"><circle cx="55" cy="55" r="50" stroke="#0BA5B0" stroke-width="4" fill="none" opacity="0.5"/><line x1="55" y1="5" x2="55" y2="16" stroke="#0BA5B0" stroke-width="3.5" opacity="0.7"/><line x1="55" y1="94" x2="55" y2="105" stroke="#0BA5B0" stroke-width="3.5" opacity="0.7"/><line x1="5" y1="55" x2="16" y2="55" stroke="#0BA5B0" stroke-width="3.5" opacity="0.7"/><line x1="94" y1="55" x2="105" y2="55" stroke="#0BA5B0" stroke-width="3.5" opacity="0.7"/><path d="M55 84 L20 26 L32 26 L55 70 L78 26 L90 26 Z" fill="#0BA5B0"/></svg>
+      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 110 110"><circle cx="55" cy="55" r="50" stroke="#0BA5B0" stroke-width="4" fill="none" opacity="0.5"/><line x1="55" y1="5" x2="55" y2="16" stroke="#0BA5B0" stroke-width="3.5" opacity="0.7"/><line x1="55" y1="94" x2="55" y2="105" stroke="#0BA5B0" stroke-width="3.5" opacity="0.7"/><line x1="5" y1="55" x2="16" y2="55" stroke="#0BA5B0" stroke-width="3.5" opacity="0.7"/><line x1="94" y1="55" x2="105" y2="55" stroke="#0BA5B0" stroke-width="3.5" opacity="0.7"/><path d="M55 84 L20 26 L32 26 L55 70 L78 26 L90 26 Z" fill="#DC2626"/></svg>
       <span style="color:#fff;font-size:12px;font-weight:300;letter-spacing:.22em;text-transform:uppercase;font-family:inherit">VOLANTI</span>
     </div>
     <span class="sbi" id="utcclk">UTC --:--</span>
@@ -683,7 +684,7 @@ var S = {
   myRole:'owner_admin',   // 'owner_admin'|'owner_viewer'|'crew'|'copilot'
   settings:{
     theme:'light',
-    dashOrder:['fuel','expenses','ownerexpenses','bookings','nearest','weather','quickplan'],
+    dashOrder:['fuel','flighthours','expenses','ownerexpenses','bookings','nearest','weather','quickplan'],
     dashHidden:[],
     dashLayout:{},   // {widgetId: {w:1|2, h:1|2}} — col span and height
     textSize:'normal',
@@ -1040,7 +1041,7 @@ function loadState(){
     if(d.pfTo)S.pfTo=d.pfTo;
     if(d.mktSaved)S.mktSaved=d.mktSaved;
     // ── Settings — always merge saved prefs but guarantee latest widgets in dashOrder
-    var LATEST_ORDER=['fuel','expenses','ownerexpenses','bookings','nearest','weather','quickplan'];
+    var LATEST_ORDER=['fuel','flighthours','expenses','ownerexpenses','bookings','nearest','weather','quickplan'];
     var REMOVED_WIDGETS=['stats','kpi','kpi_bar','kpi_hobbs','kpi_total','kpi_month','kpi_year','kpi_compliance','kpi_oil','kpi_charter'];
     if(d.settings){
       S.settings=Object.assign(S.settings||{},d.settings);
@@ -1244,7 +1245,7 @@ function loginH(){
     +'<div style="text-align:center;width:100%">'
       // Logo mark
       +'<div style="margin-bottom:16px;filter:drop-shadow(0 8px 24px rgba(11,165,176,.5))">'
-        +'<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 110 110"><rect width="110" height="110" rx="24" fill="#060E18"/><circle cx="55" cy="55" r="46" stroke="#0BA5B0" stroke-width="1.5" fill="none" opacity="0.5"/><line x1="55" y1="9" x2="55" y2="18" stroke="#0BA5B0" stroke-width="2.5" opacity="0.6"/><line x1="55" y1="92" x2="55" y2="101" stroke="#0BA5B0" stroke-width="2.5" opacity="0.6"/><line x1="9" y1="55" x2="18" y2="55" stroke="#0BA5B0" stroke-width="2.5" opacity="0.6"/><line x1="92" y1="55" x2="101" y2="55" stroke="#0BA5B0" stroke-width="2.5" opacity="0.6"/><path d="M55 82 L22 28 L33 28 L55 68 L77 28 L88 28 Z" fill="#0BA5B0"/></svg>'
+        +'<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 110 110"><rect width="110" height="110" rx="24" fill="#060E18"/><circle cx="55" cy="55" r="46" stroke="#0BA5B0" stroke-width="1.5" fill="none" opacity="0.5"/><line x1="55" y1="9" x2="55" y2="18" stroke="#0BA5B0" stroke-width="2.5" opacity="0.6"/><line x1="55" y1="92" x2="55" y2="101" stroke="#0BA5B0" stroke-width="2.5" opacity="0.6"/><line x1="9" y1="55" x2="18" y2="55" stroke="#0BA5B0" stroke-width="2.5" opacity="0.6"/><line x1="92" y1="55" x2="101" y2="55" stroke="#0BA5B0" stroke-width="2.5" opacity="0.6"/><path d="M55 82 L22 28 L33 28 L55 68 L77 28 L88 28 Z" fill="#DC2626"/></svg>'
       +'</div>'
       // Name
       +'<div style="color:#fff;font-size:36px;font-weight:900;letter-spacing:-1px;line-height:1">Volanti</div>'
@@ -1289,7 +1290,7 @@ function obH(){
 
   if(S.obStep===1){
     body='<div style="text-align:center;margin-bottom:18px">'
-        +'<div style="margin-bottom:4px;display:inline-block"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 110 110"><rect width="110" height="110" rx="24" fill="#060E18"/><circle cx="55" cy="55" r="46" stroke="#0BA5B0" stroke-width="1.5" fill="none" opacity="0.5"/><line x1="55" y1="9" x2="55" y2="18" stroke="#0BA5B0" stroke-width="2.5" opacity="0.6"/><line x1="55" y1="92" x2="55" y2="101" stroke="#0BA5B0" stroke-width="2.5" opacity="0.6"/><line x1="9" y1="55" x2="18" y2="55" stroke="#0BA5B0" stroke-width="2.5" opacity="0.6"/><line x1="92" y1="55" x2="101" y2="55" stroke="#0BA5B0" stroke-width="2.5" opacity="0.6"/><path d="M55 82 L22 28 L33 28 L55 68 L77 28 L88 28 Z" fill="#0BA5B0"/></svg></div>'
+        +'<div style="margin-bottom:4px;display:inline-block"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 110 110"><rect width="110" height="110" rx="24" fill="#060E18"/><circle cx="55" cy="55" r="46" stroke="#0BA5B0" stroke-width="1.5" fill="none" opacity="0.5"/><line x1="55" y1="9" x2="55" y2="18" stroke="#0BA5B0" stroke-width="2.5" opacity="0.6"/><line x1="55" y1="92" x2="55" y2="101" stroke="#0BA5B0" stroke-width="2.5" opacity="0.6"/><line x1="9" y1="55" x2="18" y2="55" stroke="#0BA5B0" stroke-width="2.5" opacity="0.6"/><line x1="92" y1="55" x2="101" y2="55" stroke="#0BA5B0" stroke-width="2.5" opacity="0.6"/><path d="M55 82 L22 28 L33 28 L55 68 L77 28 L88 28 Z" fill="#DC2626"/></svg></div>'
         +'<div style="font-size:18px;font-weight:800;color:var(--t1);margin-top:8px">Set up your aircraft</div>'
         +'<div style="font-size:12px;color:var(--t2);margin-top:4px;line-height:1.5">Any aircraft — piston, turboprop, or jet.<br>Personalizes checklists, W&B and performance.</div>'
       +'</div>'
@@ -2113,6 +2114,7 @@ var DASH_WIDGETS={
   kpi_bar:      {label:'KPI strip',             icon:'📊'},
   quickplan:    {label:'Quick flight plan',     icon:'🗺'},
   fuel:         {label:'Fuel on board',         icon:'⛽'},
+  flighthours:  {label:'Flight hours chart',    icon:'✈'},
   expenses:     {label:'Expenses by month',     icon:'💰'},
   ownerexpenses:{label:'Owner expense split',   icon:'👥'},
   kpi:          {label:'Flight KPIs (full)',    icon:'📈'},
@@ -2128,6 +2130,7 @@ function renderDashWidget(id,apt){
     var h=S.settings&&S.settings.dashHidden&&S.settings.dashHidden.indexOf(id)>=0;
     if(h)return'';
     if(id==='kpi_bar')        return dashWidget_kpi_bar();
+    if(id==='flighthours')    return dashWidget_flightHours();
     if(id==='quickplan')      return dashWidget_quickplan();
     if(id==='fuel')           return dashWidget_fuel();
     if(id==='expenses')       return dashWidget_expenses();
@@ -2606,9 +2609,9 @@ function dashH(){
       +'<div style="text-align:right"><div style="font-size:12px;font-weight:700;color:var(--teal)">'+a.nm+' NM</div><div style="font-size:9px;color:var(--t3)">'+a.brg+'</div></div></div>';
   }).join('');
 
-  if(!S.settings)S.settings={theme:'light',dashOrder:['fuel','expenses','ownerexpenses','bookings','nearest','weather','quickplan'],dashHidden:[],textSize:'normal'};
+  if(!S.settings)S.settings={theme:'light',dashOrder:['fuel','flighthours','expenses','ownerexpenses','bookings','nearest','weather','quickplan'],dashHidden:[],textSize:'normal'};
   var order = S.settings.dashOrder || [];
-  if(!order.length) order=['fuel','expenses','ownerexpenses','bookings','nearest','weather','quickplan'];
+  if(!order.length) order=['fuel','flighthours','expenses','ownerexpenses','bookings','nearest','weather','quickplan'];
 
   // ── Computed quick stats for banner ─────────────────────────
   var now       = new Date();
@@ -2748,8 +2751,8 @@ function dashH(){
       var visible = order.filter(function(id){
         return DASH_WIDGETS[id] && S.settings.dashHidden.indexOf(id)<0;
       });
-      if(!visible.length)visible=['fuel','expenses','ownerexpenses','bookings','nearest','weather','quickplan'];
-      var w        = window.innerWidth;
+      if(!visible.length)visible=['fuel','flighthours','expenses','ownerexpenses','bookings','nearest','weather','quickplan'];
+      var w        = document.documentElement.clientWidth||window.innerWidth;
       var sbW      = (w>=768 && document.getElementById('app') && !document.getElementById('app').classList.contains('sb-hidden')) ? (_sbCollapsed?64:220) : 0;
       var avail    = w - sbW;
       var cols     = avail>=1400?4 : avail>=900?3 : avail>=600?2 : 1;
@@ -2798,7 +2801,7 @@ function applyTheme(theme){
 }
 
 function settingsH(){
-  if(!S.settings)S.settings={theme:'light',dashOrder:['fuel','expenses','ownerexpenses','bookings','nearest','weather','quickplan'],dashHidden:[],textSize:'normal'};
+  if(!S.settings)S.settings={theme:'light',dashOrder:['fuel','flighthours','expenses','ownerexpenses','bookings','nearest','weather','quickplan'],dashHidden:[],textSize:'normal'};
   var st=S.settings;
   var isDark=st.theme==='dark';
   // Ensure all known widgets are in the order (add missing ones at end)
@@ -2911,7 +2914,7 @@ function dashToggleWidget(id){
 }
 
 function dashResetLayout(){
-  S.settings.dashOrder=['fuel','expenses','ownerexpenses','bookings','nearest','weather','quickplan'];
+  S.settings.dashOrder=['fuel','flighthours','expenses','ownerexpenses','bookings','nearest','weather','quickplan'];
   S.settings.dashHidden=[];
   S.settings.dashLayout={};
   S.settings.textSize='normal';
@@ -2981,7 +2984,7 @@ function renderDashGrid(grid){
 
   var hidden=S.settings.dashHidden||[];
   var visible=order.filter(function(id){return DASH_WIDGETS[id]&&hidden.indexOf(id)<0;});
-  var w=window.innerWidth;
+  var w=document.documentElement.clientWidth||window.innerWidth;
   var sidebarW=(w>=768&&!document.getElementById('app').classList.contains('sb-hidden'))?(_sbCollapsed?64:220):0;
   var avail=w-sidebarW;
   var cols=avail>=1400?4:avail>=900?3:avail>=600?2:1;
@@ -2996,6 +2999,7 @@ function buildWidgetGridHTML(visible, cols, apt){
   // Default spans per widget — intentional sizing for each screen size
   var DEFAULT_SPANS = {
     fuel:         {w:1, h:1},
+    flighthours:  {w:2, h:1},
     quickplan:    {w:1, h:1},
     bookings:     {w:1, h:1},
     expenses:     {w:2, h:1},
@@ -3032,6 +3036,7 @@ function buildWidgetGridHTML(visible, cols, apt){
     // Widget min-heights by type for visual consistency
     var minH = {
       fuel:'280px', weather:'300px', quickplan:'110px',
+      flighthours:'240px',
       bookings:'160px', nearest:'200px',
       expenses:'200px', ownerexpenses:'160px',
     }[id] || '120px';
@@ -3389,13 +3394,119 @@ function billingH(){
   }
 
   if(S.bilTab==='summary'){
+    if(!S._sumStart) S._sumStart=new Date(new Date().getFullYear(),0,1).toISOString().slice(0,10);
+    if(!S._sumEnd)   S._sumEnd=new Date().toISOString().slice(0,10);
+    if(!S._sumOwner) S._sumOwner='all';
+
+    var allExp = getAllExpenses();
+    var allOwners = [{name:'All parties',k:'all'}].concat(
+      (S.coOwners||[]).filter(function(o){return o.name&&(o.role==='owner_admin'||o.role==='owner_viewer'||!o.role);})
+        .map(function(o){return {name:o.name,k:o.name};})
+    );
+    if(S.ac.charterEnabled) allOwners.push({name:'Charter',k:'charter'});
+
+    // Filter expenses
+    var filtered = allExp.filter(function(e){
+      if(!e.date) return false;
+      if(e.date < S._sumStart || e.date > S._sumEnd) return false;
+      if(S._sumOwner!=='all'){
+        if(S._sumOwner==='charter') return e.flightType==='charter'||e.cat==='charter';
+        return (e.owner||'').toLowerCase()===S._sumOwner.toLowerCase();
+      }
+      return true;
+    });
+
+    // Totals
+    var grandTotal = filtered.reduce(function(s,e){return s+e.amount;},0);
+
+    // By category
+    var EXP_CAT_LABELS={fuel:'⛽ Fuel',maintenance:'🔧 Maintenance',insurance:'🛡 Insurance',
+      hangar:'🏗 Hangar',landing:'🛬 Landing fees',training:'📚 Training',
+      admin:'📋 Admin',other:'📝 Other'};
+    var byCat={};
+    filtered.forEach(function(e){
+      var c=e.cat||'other';
+      byCat[c]=(byCat[c]||0)+e.amount;
+    });
+
+    // By owner (if all parties)
+    var byOwner={};
+    filtered.forEach(function(e){
+      var n=e.owner||'Unassigned';
+      byOwner[n]=(byOwner[n]||0)+e.amount;
+    });
+
+    var catRows = Object.keys(byCat).sort(function(a,b){return byCat[b]-byCat[a];}).map(function(c){
+      return '<tr style="border-bottom:.5px solid var(--bd)">'
+        +'<td style="padding:7px 0;font-size:12px;color:var(--t1)">'+(EXP_CAT_LABELS[c]||c)+'</td>'
+        +'<td style="padding:7px 0;font-size:12px;font-weight:700;color:var(--t1);text-align:right">$'+Math.round(byCat[c]).toLocaleString()+'</td>'
+        +'<td style="padding:7px 0;font-size:11px;color:var(--t3);text-align:right">'+Math.round(byCat[c]/grandTotal*100)+'%</td>'
+      +'</tr>';
+    }).join('');
+
+    var ownerRows = Object.keys(byOwner).sort(function(a,b){return byOwner[b]-byOwner[a];}).map(function(n){
+      return '<tr style="border-bottom:.5px solid var(--bd)">'
+        +'<td style="padding:7px 0;font-size:12px;color:var(--t1)">'+esc(n)+'</td>'
+        +'<td style="padding:7px 0;font-size:12px;font-weight:700;color:var(--t1);text-align:right">$'+Math.round(byOwner[n]).toLocaleString()+'</td>'
+        +'<td style="padding:7px 0;font-size:11px;color:var(--t3);text-align:right">'+Math.round(byOwner[n]/grandTotal*100)+'%</td>'
+      +'</tr>';
+    }).join('');
+
+    // Recent expense list
+    var expList = filtered.slice().sort(function(a,b){return b.date>a.date?1:-1;}).slice(0,50).map(function(e){
+      return '<tr style="border-bottom:.5px solid var(--bd)">'
+        +'<td style="padding:6px 0;font-size:11px;color:var(--t3)">'+e.date+'</td>'
+        +'<td style="padding:6px 0;font-size:11px;color:var(--t1)">'+esc(e.desc||e.cat||'—')+'</td>'
+        +'<td style="padding:6px 0;font-size:11px;color:var(--t3)">'+esc(e.owner||'—')+'</td>'
+        +'<td style="padding:6px 0;font-size:11px;font-weight:700;color:var(--t1);text-align:right">$'+Math.round(e.amount).toLocaleString()+'</td>'
+      +'</tr>';
+    }).join('');
+
     body='<div style="padding:12px 13px 100px">'
-    +'<div class="card">'
-      +'<div class="fr"><div class="fg"><div class="fl">Start date</div><input class="fi" type="date"></div><div class="fg"><div class="fl">End date</div><input class="fi" type="date"></div></div>'
-      +'<div class="fg"><div class="fl">Responsible party</div><select class="fi"><option>All parties</option><option>Owner 1</option><option>Owner 2</option><option>Charter</option></select></div>'
-      +'<button class="btn bna" style="font-size:12px;padding:11px;letter-spacing:.5px" onclick="printSummary()">🖨 Print report</button>'
-    +'</div>'
-    +'<div class="card"><div style="font-size:15px;font-weight:800;color:var(--t1);margin-bottom:4px">EXPENSE SUMMARY REPORT</div><div style="font-size:11px;color:var(--t2)">No expenses recorded yet</div></div>'
+      // Filter card
+      +'<div class="card">'
+        +'<div class="fr"><div class="fg"><div class="fl">Start date</div>'
+          +'<input class="fi" type="date" value="'+S._sumStart+'" onchange="S._sumStart=this.value;go(\'billing\')"></div>'
+        +'<div class="fg"><div class="fl">End date</div>'
+          +'<input class="fi" type="date" value="'+S._sumEnd+'" onchange="S._sumEnd=this.value;go(\'billing\')"></div></div>'
+        +'<div class="fg"><div class="fl">Owner / party</div>'
+          +'<select class="fi" onchange="S._sumOwner=this.value;go(\'billing\')">'
+            +allOwners.map(function(o){return '<option value="'+esc(o.k)+'" '+(S._sumOwner===o.k?'selected':'')+'>'+esc(o.name)+'</option>';}).join('')
+          +'</select></div>'
+        +'<button class="btn bna" style="font-size:12px;padding:11px;letter-spacing:.5px" onclick="printExpenseSummary()">🖨 Print / Export PDF</button>'
+      +'</div>'
+      // Summary
+      +(filtered.length===0
+        ?'<div class="card" style="text-align:center;padding:24px;color:var(--t3)"><div style="font-size:24px;margin-bottom:8px">📋</div><div>No expenses in this period</div></div>'
+        :'<div class="card">'
+          +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'
+            +'<div><div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Total expenses</div>'
+              +'<div style="font-size:28px;font-weight:900;color:var(--t1)">$'+Math.round(grandTotal).toLocaleString()+'</div>'
+              +'<div style="font-size:11px;color:var(--t3)">'+S._sumStart+' → '+S._sumEnd+' · '+filtered.length+' items</div>'
+            +'</div>'
+          +'</div>'
+          // By category
+          +'<div class="seclbl" style="margin-top:0">By category</div>'
+          +'<table style="width:100%;border-collapse:collapse">'+catRows+'</table>'
+          // By owner (only if all parties selected)
+          +(S._sumOwner==='all' && Object.keys(byOwner).length>1
+            ?'<div class="seclbl">By owner</div><table style="width:100%;border-collapse:collapse">'+ownerRows+'</table>'
+            :'')
+          // Expense list
+          +'<div class="seclbl">All expenses</div>'
+          +'<table style="width:100%;border-collapse:collapse">'
+            +'<tr style="border-bottom:1px solid var(--bd)">'
+              +'<th style="padding:5px 0;font-size:9px;font-weight:700;color:var(--t3);text-transform:uppercase;text-align:left">Date</th>'
+              +'<th style="padding:5px 0;font-size:9px;font-weight:700;color:var(--t3);text-transform:uppercase;text-align:left">Description</th>'
+              +'<th style="padding:5px 0;font-size:9px;font-weight:700;color:var(--t3);text-transform:uppercase;text-align:left">Owner</th>'
+              +'<th style="padding:5px 0;font-size:9px;font-weight:700;color:var(--t3);text-transform:uppercase;text-align:right">Amount</th>'
+            +'</tr>'
+            +expList
+            +'<tr><td colspan="3" style="padding:8px 0;font-size:12px;font-weight:800;color:var(--t1)">TOTAL</td>'
+              +'<td style="padding:8px 0;font-size:13px;font-weight:900;color:var(--teal);text-align:right">$'+Math.round(grandTotal).toLocaleString()+'</td></tr>'
+          +'</table>'
+        +'</div>'
+      )
     +'</div>';
   }
 
@@ -3586,7 +3697,7 @@ function toggleMobileSidebar(){
     nb.classList.remove('sb-open-mobile');
     // Restore bottom bar content
     if(nb.dataset.bottomHTML) nb.innerHTML = nb.dataset.bottomHTML;
-    nb.style.cssText='background:var(--card);border-top:.5px solid var(--bd);display:flex;flex-shrink:0;padding:4px 0 8px;gap:0';
+    nb.style.cssText='background:var(--card);border-top:.5px solid var(--bd);display:flex;flex-shrink:0;padding:4px 0 8px;gap:0;position:relative;z-index:100';
     var ov = document.getElementById('sb-mobile-ov');
     if(ov) ov.remove();
   } else {
@@ -3608,7 +3719,7 @@ function closeMobileSidebar(){
   if(nb.classList.contains('sb-open-mobile')){
     nb.classList.remove('sb-open-mobile');
     if(nb.dataset.bottomHTML) nb.innerHTML = nb.dataset.bottomHTML;
-    nb.style.cssText='background:var(--card);border-top:.5px solid var(--bd);display:flex;flex-shrink:0;padding:4px 0 8px;gap:0';
+    nb.style.cssText='background:var(--card);border-top:.5px solid var(--bd);display:flex;flex-shrink:0;padding:4px 0 8px;gap:0;position:relative;z-index:100';
   }
   var ov = document.getElementById('sb-mobile-ov');
   if(ov) ov.remove();
@@ -3619,12 +3730,14 @@ function updateSidebarHeader(){}
 
 function renderNavBar(){
   try{
-  if(!S.settings) S.settings={theme:'light',dashOrder:['fuel','expenses','ownerexpenses','bookings','nearest','weather','quickplan'],dashHidden:[],textSize:'normal'};
+  if(!S.settings) S.settings={theme:'light',dashOrder:['fuel','flighthours','expenses','ownerexpenses','bookings','nearest','weather','quickplan'],dashHidden:[],textSize:'normal'};
 
   var nb = $('nb');
   if(!nb) return;
   var active = S.screen||'dash';
-  var isMobile = window.innerWidth < 768;
+  // Use clientWidth for more reliable mobile detection (ignores scrollbar, works in iframes)
+  var vw = document.documentElement.clientWidth || window.innerWidth;
+  var isMobile = vw < 768;
 
   // Show/hide hamburger on mobile
   var hbg = document.getElementById('sb-hamburger');
@@ -3663,7 +3776,7 @@ function renderNavBar(){
     }
   ];
 
-  var compassSVG = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 110 110"><rect width="110" height="110" rx="20" fill="#060E18"/><circle cx="55" cy="55" r="46" stroke="#0BA5B0" stroke-width="2" fill="none" opacity="0.5"/><line x1="55" y1="9" x2="55" y2="19" stroke="#0BA5B0" stroke-width="3" opacity="0.7"/><line x1="55" y1="91" x2="55" y2="101" stroke="#0BA5B0" stroke-width="3" opacity="0.7"/><line x1="9" y1="55" x2="19" y2="55" stroke="#0BA5B0" stroke-width="3" opacity="0.7"/><line x1="91" y1="55" x2="101" y2="55" stroke="#0BA5B0" stroke-width="3" opacity="0.7"/><path d="M55 82 L22 28 L33 28 L55 68 L77 28 L88 28 Z" fill="#0BA5B0"/></svg>';
+  var compassSVG = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 110 110"><rect width="110" height="110" rx="20" fill="#060E18"/><circle cx="55" cy="55" r="46" stroke="#0BA5B0" stroke-width="2" fill="none" opacity="0.5"/><line x1="55" y1="9" x2="55" y2="19" stroke="#0BA5B0" stroke-width="3" opacity="0.7"/><line x1="55" y1="91" x2="55" y2="101" stroke="#0BA5B0" stroke-width="3" opacity="0.7"/><line x1="9" y1="55" x2="19" y2="55" stroke="#0BA5B0" stroke-width="3" opacity="0.7"/><line x1="91" y1="55" x2="101" y2="55" stroke="#0BA5B0" stroke-width="3" opacity="0.7"/><path d="M55 82 L22 28 L33 28 L55 68 L77 28 L88 28 Z" fill="#DC2626"/></svg>';
 
   var logoHTML = '<div class="sb-logo">'
     + compassSVG
@@ -3714,7 +3827,7 @@ function renderNavBar(){
     nb.dataset.sidebarHTML = logoHTML + itemsHTML + toggleHTML;
     nb.dataset.bottomHTML  = bottomHTML;
     nb.innerHTML = bottomHTML;
-    nb.style.cssText='background:var(--card);border-top:.5px solid var(--bd);display:flex;flex-shrink:0;padding:4px 0 8px;gap:0';
+    nb.style.cssText='background:var(--card);border-top:.5px solid var(--bd);display:flex;flex-shrink:0;padding:4px 0 8px;gap:0;position:relative;z-index:100';
   } else {
     // Desktop/tablet: full sidebar
     nb.innerHTML = logoHTML + itemsHTML + toggleHTML;
@@ -4129,7 +4242,7 @@ function showInvoice(r){
   ov.innerHTML='<div style="background:#fff;border-radius:20px 20px 0 0;padding:20px 18px 36px;width:100%">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'
       +'<div style="display:flex;align-items:center;gap:8px">'
-        +'<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 110 110"><rect width="110" height="110" rx="20" fill="#060E18"/><circle cx="55" cy="55" r="46" stroke="#0BA5B0" stroke-width="2" fill="none" opacity="0.5"/><line x1="55" y1="9" x2="55" y2="19" stroke="#0BA5B0" stroke-width="3" opacity="0.7"/><line x1="55" y1="91" x2="55" y2="101" stroke="#0BA5B0" stroke-width="3" opacity="0.7"/><line x1="9" y1="55" x2="19" y2="55" stroke="#0BA5B0" stroke-width="3" opacity="0.7"/><line x1="91" y1="55" x2="101" y2="55" stroke="#0BA5B0" stroke-width="3" opacity="0.7"/><path d="M55 82 L22 28 L33 28 L55 68 L77 28 L88 28 Z" fill="#0BA5B0"/></svg>'
+        +'<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 110 110"><rect width="110" height="110" rx="20" fill="#060E18"/><circle cx="55" cy="55" r="46" stroke="#0BA5B0" stroke-width="2" fill="none" opacity="0.5"/><line x1="55" y1="9" x2="55" y2="19" stroke="#0BA5B0" stroke-width="3" opacity="0.7"/><line x1="55" y1="91" x2="55" y2="101" stroke="#0BA5B0" stroke-width="3" opacity="0.7"/><line x1="9" y1="55" x2="19" y2="55" stroke="#0BA5B0" stroke-width="3" opacity="0.7"/><line x1="91" y1="55" x2="101" y2="55" stroke="#0BA5B0" stroke-width="3" opacity="0.7"/><path d="M55 82 L22 28 L33 28 L55 68 L77 28 L88 28 Z" fill="#DC2626"/></svg>'
         +'<div style="font-size:14px;font-weight:300;letter-spacing:.2em;text-transform:uppercase;color:#0D1B2A">VOLANTI</div>'
       +'</div>'
       +'<button onclick="this.closest(\'div[style*=absolute]\').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6B7280">✕</button>'
@@ -4147,7 +4260,99 @@ function showInvoice(r){
   document.getElementById('app').appendChild(ov);
 }
 
-function printSummary(){showToast('Opening print view...','ok');setTimeout(function(){window.print();},400);}
+function printSummary(){printExpenseSummary();}
+function printExpenseSummary(){
+  var start=S._sumStart||new Date(new Date().getFullYear(),0,1).toISOString().slice(0,10);
+  var end=S._sumEnd||new Date().toISOString().slice(0,10);
+  var ownerFilter=S._sumOwner||'all';
+
+  var allExp=getAllExpenses();
+  var filtered=allExp.filter(function(e){
+    if(!e.date||e.date<start||e.date>end)return false;
+    if(ownerFilter==='all')return true;
+    if(ownerFilter==='charter')return e.flightType==='charter'||e.cat==='charter';
+    return (e.owner||'').toLowerCase()===ownerFilter.toLowerCase();
+  });
+
+  var grandTotal=filtered.reduce(function(s,e){return s+e.amount;},0);
+  var EXP_CAT_LABELS={fuel:'Fuel',maintenance:'Maintenance',insurance:'Insurance',
+    hangar:'Hangar / Parking',landing:'Landing Fees',training:'Training',
+    admin:'Administration',other:'Other'};
+
+  // By category
+  var byCat={};
+  filtered.forEach(function(e){byCat[e.cat||'other']=(byCat[e.cat||'other']||0)+e.amount;});
+
+  // By owner
+  var byOwner={};
+  filtered.forEach(function(e){var n=e.owner||'Unassigned';byOwner[n]=(byOwner[n]||0)+e.amount;});
+
+  var catRows=Object.keys(byCat).sort(function(a,b){return byCat[b]-byCat[a];}).map(function(c){
+    return '<tr><td>'+(EXP_CAT_LABELS[c]||c)+'</td><td style="text-align:right">$'+Math.round(byCat[c]).toLocaleString()+'</td><td style="text-align:right;color:#666">'+Math.round(byCat[c]/grandTotal*100)+'%</td></tr>';
+  }).join('');
+
+  var ownerRows=Object.keys(byOwner).sort(function(a,b){return byOwner[b]-byOwner[a];}).map(function(n){
+    return '<tr><td>'+n+'</td><td style="text-align:right">$'+Math.round(byOwner[n]).toLocaleString()+'</td><td style="text-align:right;color:#666">'+Math.round(byOwner[n]/grandTotal*100)+'%</td></tr>';
+  }).join('');
+
+  var expRows=filtered.slice().sort(function(a,b){return b.date>a.date?1:-1;}).map(function(e){
+    return '<tr><td>'+e.date+'</td><td>'+(e.desc||e.cat||'—')+'</td><td>'+(e.owner||'—')+'</td><td style="text-align:right">$'+Math.round(e.amount).toLocaleString()+'</td></tr>';
+  }).join('');
+
+  var periodLabel=ownerFilter==='all'?'All owners':ownerFilter==='charter'?'Charter':ownerFilter;
+  var dateLabel=start+' to '+end;
+  var printDate=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+
+  var html='<!DOCTYPE html><html><head><meta charset="utf-8">'
+    +'<title>Volanti Expense Report — '+esc(S.ac.tail||'')+'</title>'
+    +'<style>'
+      +'*{margin:0;padding:0;box-sizing:border-box;}'
+      +'body{font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;font-size:12px;color:#111;padding:40px;max-width:800px;margin:0 auto}'
+      +'h1{font-size:22px;font-weight:900;color:#060E18;letter-spacing:-.3px}'
+      +'h2{font-size:13px;font-weight:800;color:#060E18;text-transform:uppercase;letter-spacing:.6px;margin:24px 0 8px;padding-bottom:4px;border-bottom:2px solid #060E18}'
+      +'.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:16px;border-bottom:2px solid #060E18}'
+      +'.logo{display:flex;align-items:center;gap:10px}'
+      +'.logo-text{font-size:20px;font-weight:300;letter-spacing:.2em;color:#060E18;text-transform:uppercase}'
+      +'.meta{font-size:11px;color:#666;margin-top:4px}'
+      +'.total-box{background:#060E18;color:#fff;padding:14px 20px;border-radius:8px;text-align:right}'
+      +'.total-box .label{font-size:10px;text-transform:uppercase;letter-spacing:.5px;opacity:.6}'
+      +'.total-box .amount{font-size:26px;font-weight:900}'
+      +'table{width:100%;border-collapse:collapse}'
+      +'th{text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#666;padding:6px 0;border-bottom:1px solid #ddd}'
+      +'td{padding:7px 0;border-bottom:.5px solid #eee;font-size:12px}'
+      +'.total-row td{font-weight:800;border-top:2px solid #060E18;border-bottom:none;padding-top:10px}'
+      +'.footer{margin-top:40px;padding-top:12px;border-top:1px solid #ddd;font-size:10px;color:#999;display:flex;justify-content:space-between}'
+      +'@media print{body{padding:20px}button{display:none}}'
+    +'</style></head><body>'
+    +'<div class="header">'
+      +'<div>'
+        +'<div class="logo"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 110 110"><rect width="110" height="110" rx="16" fill="#060E18"/><circle cx="55" cy="55" r="46" stroke="#0BA5B0" stroke-width="2" fill="none" opacity="0.5"/><path d="M55 82 L22 28 L33 28 L55 68 L77 28 L88 28 Z" fill="#DC2626"/></svg>'
+          +'<span class="logo-text">Volanti</span>'
+        +'</div>'
+        +'<div class="meta" style="margin-top:8px"><strong>'+esc(S.ac.tail||'Aircraft')+'</strong>'+(S.ac.make?' · '+esc(S.ac.make+(S.ac.model?' '+S.ac.model:'')):'')+'<br>Expense Summary Report<br>'+dateLabel+' · '+periodLabel+'</div>'
+      +'</div>'
+      +'<div class="total-box"><div class="label">Total expenses</div><div class="amount">$'+Math.round(grandTotal).toLocaleString()+'</div><div style="font-size:10px;opacity:.6">'+filtered.length+' items</div></div>'
+    +'</div>'
+
+    +'<h2>By category</h2>'
+    +'<table><thead><tr><th>Category</th><th style="text-align:right">Amount</th><th style="text-align:right">%</th></tr></thead><tbody>'+catRows
+    +'<tr class="total-row"><td>Total</td><td style="text-align:right">$'+Math.round(grandTotal).toLocaleString()+'</td><td></td></tr></tbody></table>'
+
+    +(Object.keys(byOwner).length>1
+      ?'<h2>By owner</h2><table><thead><tr><th>Owner</th><th style="text-align:right">Amount</th><th style="text-align:right">%</th></tr></thead><tbody>'+ownerRows+'</tbody></table>'
+      :'')
+
+    +'<h2>All expenses</h2>'
+    +'<table><thead><tr><th>Date</th><th>Description</th><th>Owner</th><th style="text-align:right">Amount</th></tr></thead><tbody>'+expRows
+    +'<tr class="total-row"><td colspan="3">Total</td><td style="text-align:right">$'+Math.round(grandTotal).toLocaleString()+'</td></tr></tbody></table>'
+
+    +'<div class="footer"><span>Generated by Volanti · '+printDate+'</span><span>'+esc(S.pilot.name||'')+'</span></div>'
+    +'<br><button onclick="window.print()" style="padding:10px 24px;background:#060E18;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;margin-top:8px">Print / Save as PDF</button>'
+    +'</body></html>';
+
+  var w=window.open('','_blank');
+  if(w){ w.document.write(html); w.document.close(); w.focus(); }
+}
 
 // ═══ CRUISE PERFORMANCE ENGINE ════════════════════════════════════
 
@@ -6681,7 +6886,7 @@ function squawksPDF(){
     +'@media print{body{padding:16px}}'
     +'</style></head><body>'
     +'<div class="header">'
-      +'<div><div class="logo"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 110 110"><rect width="110" height="110" rx="20" fill="#060E18"/><circle cx="55" cy="55" r="46" stroke="#0BA5B0" stroke-width="2" fill="none" opacity="0.5"/><line x1="55" y1="9" x2="55" y2="19" stroke="#0BA5B0" stroke-width="3" opacity="0.7"/><line x1="55" y1="91" x2="55" y2="101" stroke="#0BA5B0" stroke-width="3" opacity="0.7"/><line x1="9" y1="55" x2="19" y2="55" stroke="#0BA5B0" stroke-width="3" opacity="0.7"/><line x1="91" y1="55" x2="101" y2="55" stroke="#0BA5B0" stroke-width="3" opacity="0.7"/><path d="M55 82 L22 28 L33 28 L55 68 L77 28 L88 28 Z" fill="#0BA5B0"/></svg><span class="logo-text">VOLANTI</span></div>'
+      +'<div><div class="logo"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 110 110"><rect width="110" height="110" rx="20" fill="#060E18"/><circle cx="55" cy="55" r="46" stroke="#0BA5B0" stroke-width="2" fill="none" opacity="0.5"/><line x1="55" y1="9" x2="55" y2="19" stroke="#0BA5B0" stroke-width="3" opacity="0.7"/><line x1="55" y1="91" x2="55" y2="101" stroke="#0BA5B0" stroke-width="3" opacity="0.7"/><line x1="9" y1="55" x2="19" y2="55" stroke="#0BA5B0" stroke-width="3" opacity="0.7"/><line x1="91" y1="55" x2="101" y2="55" stroke="#0BA5B0" stroke-width="3" opacity="0.7"/><path d="M55 82 L22 28 L33 28 L55 68 L77 28 L88 28 Z" fill="#DC2626"/></svg><span class="logo-text">VOLANTI</span></div>'
       +'<div style="font-size:12px;color:#6b7280;margin-top:4px">Squawk Report</div></div>'
       +'<div class="meta">'
         +'<div style="font-weight:700;font-size:14px">'+esc(S.ac.tail||'Aircraft')+'</div>'
@@ -11336,6 +11541,190 @@ function dashWidget_ownerExpenses(){
 }
 
 // ═══ KPI BAR WIDGET — horizontal strip of all key metrics ═══════
+// ═══ FLIGHT HOURS CHART WIDGET ═══════════════════════════════════
+function dashWidget_flightHours(){
+  // State stored on S for persistence across re-renders
+  if(!S._fhView) S._fhView='month';       // 'year' | 'month' | 'week'
+  if(!S._fhOwner) S._fhOwner='all';       // 'all' | owner name | 'charter'
+
+  var view   = S._fhView;
+  var filter = S._fhOwner;
+  var now    = new Date();
+  var log    = S.logbook||[];
+
+  // ── Build owner filter options ─────────────────────────────────
+  var ownerSet = {};
+  log.forEach(function(f){ var n=(f.owner||'').trim(); if(n) ownerSet[n]=true; });
+  var ownerNames = Object.keys(ownerSet).sort();
+  var hasCharter = log.some(function(f){return f.flightType==='charter';});
+
+  // ── Aggregate data ─────────────────────────────────────────────
+  function matches(f){
+    if(filter==='all') return true;
+    if(filter==='charter') return f.flightType==='charter';
+    return (f.owner||'').trim()===filter;
+  }
+
+  var labels=[], datasets=[], totals=[], barColors=[];
+  var TEAL='rgba(11,165,176,0.85)', TEAL_L='rgba(11,165,176,0.3)';
+  var RED='rgba(220,38,38,0.8)', RED_L='rgba(220,38,38,0.25)';
+
+  if(view==='year'){
+    // Last 5 years
+    var yr = now.getFullYear();
+    for(var y=yr-4;y<=yr;y++){
+      labels.push(String(y));
+      var hrs=0;
+      log.forEach(function(f){
+        if(!matches(f))return;
+        var d=new Date(f.date); if(isNaN(d))return;
+        if(d.getFullYear()===y) hrs+=parseFloat(f.time)||0;
+      });
+      totals.push(Math.round(hrs*10)/10);
+      barColors.push(y===yr?TEAL:TEAL_L);
+    }
+  } else if(view==='month'){
+    // Last 12 months
+    var MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    for(var m=11;m>=0;m--){
+      var d2=new Date(now.getFullYear(),now.getMonth()-m,1);
+      labels.push(MONTHS[d2.getMonth()]+(d2.getFullYear()!==now.getFullYear()?"'"+(d2.getFullYear()%100):''));
+      var hrs2=0;
+      log.forEach(function(f){
+        if(!matches(f))return;
+        var fd=new Date(f.date); if(isNaN(fd))return;
+        if(fd.getFullYear()===d2.getFullYear()&&fd.getMonth()===d2.getMonth()) hrs2+=parseFloat(f.time)||0;
+      });
+      totals.push(Math.round(hrs2*10)/10);
+      barColors.push(m===0?TEAL:TEAL_L);
+    }
+  } else {
+    // Last 8 weeks
+    for(var w=7;w>=0;w--){
+      var wStart=new Date(now); wStart.setDate(now.getDate()-now.getDay()-w*7);
+      var wEnd=new Date(wStart); wEnd.setDate(wStart.getDate()+6);
+      var mo=wStart.getMonth()+1, dy=wStart.getDate();
+      labels.push(mo+'/'+dy);
+      var hrs3=0;
+      log.forEach(function(f){
+        if(!matches(f))return;
+        var fd=new Date(f.date); if(isNaN(fd))return;
+        if(fd>=wStart&&fd<=wEnd) hrs3+=parseFloat(f.time)||0;
+      });
+      totals.push(Math.round(hrs3*10)/10);
+      barColors.push(w===0?TEAL:TEAL_L);
+    }
+  }
+
+  var totalHrs = totals.reduce(function(s,v){return s+v;},0);
+  var maxHrs   = Math.max.apply(null, totals.concat([0.1]));
+  var avgHrs   = totals.filter(function(v){return v>0;});
+  avgHrs = avgHrs.length ? Math.round(avgHrs.reduce(function(a,b){return a+b;})/avgHrs.length*10)/10 : 0;
+
+  // ── Toggle button helper ───────────────────────────────────────
+  function tabBtn(label, viewKey, active){
+    return '<button onclick="S._fhView=\''+viewKey+'\';renderDashGrid(document.getElementById(\'dash-widget-grid\'))" '
+      +'style="flex:1;padding:5px 4px;border-radius:7px;border:none;cursor:pointer;font-size:10px;font-weight:700;font-family:inherit;'
+      +'background:'+(active?'var(--teal)':'transparent')+';color:'+(active?'#fff':'var(--t3)')+'">'+label+'</button>';
+  }
+
+  // ── Owner filter pills ─────────────────────────────────────────
+  var filterOptions = [{k:'all',l:'All'}];
+  ownerNames.forEach(function(n){filterOptions.push({k:n,l:n.split(' ')[0]});});
+  if(hasCharter) filterOptions.push({k:'charter',l:'Charter'});
+
+  var filterPills = filterOptions.map(function(o){
+    var sel=filter===o.k;
+    return '<button onclick="S._fhOwner=\''+o.k+'\';renderDashGrid(document.getElementById(\'dash-widget-grid\'))" '
+      +'style="padding:3px 10px;border-radius:20px;border:1px solid '+(sel?'var(--teal)':'var(--bd)')+';background:'+(sel?'rgba(11,165,176,.12)':'transparent')+';color:'+(sel?'var(--teal)':'var(--t3)')+';font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">'+o.l+'</button>';
+  }).join('');
+
+  // ── Chart ID ──────────────────────────────────────────────────
+  var cid='fh-chart-'+Date.now();
+
+  // ── Mini stat row ─────────────────────────────────────────────
+  var statRow='<div style="display:flex;gap:12px;margin-bottom:10px">'
+    +'<div><div style="font-size:18px;font-weight:900;color:var(--teal);line-height:1">'+totalHrs.toFixed(1)+'</div><div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.4px">Total</div></div>'
+    +'<div style="width:.5px;background:var(--bd)"></div>'
+    +'<div><div style="font-size:18px;font-weight:900;color:var(--t1);line-height:1">'+avgHrs+'</div><div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.4px">Avg / period</div></div>'
+    +'<div style="width:.5px;background:var(--bd)"></div>'
+    +'<div><div style="font-size:18px;font-weight:900;color:var(--t1);line-height:1">'+totals[totals.length-1].toFixed(1)+'</div><div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.4px">'+(view==='year'?'This yr':view==='month'?'This mo':'This wk')+'</div></div>'
+  +'</div>';
+
+  var html='<div class="card" style="display:flex;flex-direction:column">'
+    // Header
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
+      +'<div class="seclbl" style="margin:0">✈ Flight hours</div>'
+      +'<div style="display:flex;gap:2px;background:var(--bg);border:.5px solid var(--bd);border-radius:8px;padding:2px">'
+        +tabBtn('Week','week',view==='week')
+        +tabBtn('Month','month',view==='month')
+        +tabBtn('Year','year',view==='year')
+      +'</div>'
+    +'</div>'
+    // Owner filter
+    +(filterOptions.length>1
+      ?'<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">'+filterPills+'</div>'
+      :'')
+    // Stats
+    +statRow
+    // Chart
+    +'<div style="flex:1;min-height:120px;position:relative">'
+      +'<canvas id="'+cid+'" style="width:100%;height:100%"></canvas>'
+    +'</div>'
+  +'</div>';
+
+  // Init chart after render
+  setTimeout(function(){
+    var cv=document.getElementById(cid); if(!cv)return;
+    cv.width=cv.offsetWidth; cv.height=Math.max(120,cv.offsetHeight||140);
+    var isDark=document.getElementById('app')&&document.getElementById('app').classList.contains('dark-mode');
+    var gridCol=isDark?'rgba(255,255,255,.06)':'rgba(0,0,0,.06)';
+    var labelCol=isDark?'rgba(255,255,255,.4)':'rgba(0,0,0,.4)';
+    try{
+      mkChart(cid, cv.getContext('2d'), {
+        type:'bar',
+        data:{
+          labels:labels,
+          datasets:[{
+            data:totals,
+            backgroundColor:barColors,
+            borderRadius:4,
+            borderSkipped:false,
+          }]
+        },
+        options:{
+          responsive:true,
+          maintainAspectRatio:false,
+          plugins:{
+            legend:{display:false},
+            tooltip:{
+              callbacks:{
+                label:function(c){return ' '+c.raw.toFixed(1)+' hrs';}
+              }
+            }
+          },
+          scales:{
+            x:{
+              grid:{display:false},
+              ticks:{color:labelCol,font:{size:9},maxRotation:0}
+            },
+            y:{
+              beginAtZero:true,
+              grid:{color:gridCol,lineWidth:.5},
+              ticks:{
+                color:labelCol,font:{size:9},
+                callback:function(v){return v+'h';}
+              }
+            }
+          }
+        }
+      });
+    }catch(e){}
+  },80);
+
+  return html;
+}
+
 function dashWidget_kpi_bar(){
   var now = new Date();
   var thisYear = now.getFullYear(), thisMonth = now.getMonth();
@@ -11692,7 +12081,7 @@ window.addEventListener('resize',function(){
 // Inject PWA manifest dynamically
 (function injectManifest(){
   try{
-    var svgIcon="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 110 110'%3E%3Crect width='110' height='110' rx='24' fill='%23060E18'/%3E%3Ccircle cx='55' cy='55' r='46' stroke='%230BA5B0' stroke-width='2' fill='none' opacity='0.5'/%3E%3Cline x1='55' y1='9' x2='55' y2='19' stroke='%230BA5B0' stroke-width='3' opacity='0.7'/%3E%3Cline x1='55' y1='91' x2='55' y2='101' stroke='%230BA5B0' stroke-width='3' opacity='0.7'/%3E%3Cline x1='9' y1='55' x2='19' y2='55' stroke='%230BA5B0' stroke-width='3' opacity='0.7'/%3E%3Cline x1='91' y1='55' x2='101' y2='55' stroke='%230BA5B0' stroke-width='3' opacity='0.7'/%3E%3Cpath d='M55 82 L22 28 L33 28 L55 68 L77 28 L88 28 Z' fill='%230BA5B0'/%3E%3C/svg%3E";
+    var svgIcon="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 110 110'%3E%3Crect width='110' height='110' rx='24' fill='%23060E18'/%3E%3Ccircle cx='55' cy='55' r='46' stroke='%230BA5B0' stroke-width='2' fill='none' opacity='0.5'/%3E%3Cline x1='55' y1='9' x2='55' y2='19' stroke='%230BA5B0' stroke-width='3' opacity='0.7'/%3E%3Cline x1='55' y1='91' x2='55' y2='101' stroke='%230BA5B0' stroke-width='3' opacity='0.7'/%3E%3Cline x1='9' y1='55' x2='19' y2='55' stroke='%230BA5B0' stroke-width='3' opacity='0.7'/%3E%3Cline x1='91' y1='55' x2='101' y2='55' stroke='%230BA5B0' stroke-width='3' opacity='0.7'/%3E%3Cpath d='M55 82 L22 28 L33 28 L55 68 L77 28 L88 28 Z' fill='%23DC2626'/%3E%3C/svg%3E";
     var manifest={
       name:'Volanti',
       short_name:'Volanti',
@@ -11718,8 +12107,8 @@ window.addEventListener('resize',function(){
     // Ensure critical state fields exist after load
     if(!S.social)S.social={tab:'map',friends:[],clubs:[],chats:{},visible:true,myStatus:'flying',requests:[]};
     if(!S.social.friends)S.social.friends=[];
-    if(!S.settings)S.settings={theme:'light',dashOrder:['fuel','expenses','ownerexpenses','bookings','nearest','weather','quickplan'],dashHidden:[],textSize:'normal'};
-    if(!S.settings.dashOrder)S.settings.dashOrder=['fuel','expenses','ownerexpenses','bookings','nearest','weather','quickplan'];
+    if(!S.settings)S.settings={theme:'light',dashOrder:['fuel','flighthours','expenses','ownerexpenses','bookings','nearest','weather','quickplan'],dashHidden:[],textSize:'normal'};
+    if(!S.settings.dashOrder)S.settings.dashOrder=['fuel','flighthours','expenses','ownerexpenses','bookings','nearest','weather','quickplan'];
     if(!S.settings.dashHidden)S.settings.dashHidden=[];
     if(!S.reports)S.reports=[];
     if(!S.logbook)S.logbook=[];
