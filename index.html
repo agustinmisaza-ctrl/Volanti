@@ -402,9 +402,9 @@ body.dash-editing .acbanner{outline:2px solid rgba(11,165,176,.4)}
     align-items:center!important;
     justify-content:flex-start!important;
     gap:12px!important;
-    padding:10px 18px!important;
+    padding:9px 18px!important;
     border-radius:0!important;
-    color:rgba(255,255,255,.45)!important;
+    color:rgba(255,255,255,.6)!important;
     width:100%!important;
     min-width:unset!important;
     overflow:hidden;
@@ -412,14 +412,14 @@ body.dash-editing .acbanner{outline:2px solid rgba(11,165,176,.4)}
     border-left:3px solid transparent!important;
     transition:background .15s,color .15s,border-color .15s!important;
   }
-  .ni:hover{background:rgba(255,255,255,.05)!important;color:rgba(255,255,255,.7)!important}
+  .ni:hover{background:rgba(255,255,255,.07)!important;color:rgba(255,255,255,.9)!important}
   .ni.on{
-    background:rgba(11,165,176,.12)!important;
-    color:#5EEAD4!important;
-    border-left-color:#5EEAD4!important;
+    background:rgba(11,165,176,.15)!important;
+    color:#fff!important;
+    border-left-color:#0BA5B0!important;
   }
-  .ni.on .nil{color:#5EEAD4!important;font-weight:700!important}
-  .ni.on .ni-ico{background:rgba(11,165,176,.2)!important}
+  .ni.on .nil{color:#fff!important;font-weight:700!important}
+  .ni.on .ni-ico{background:rgba(11,165,176,.25)!important}
   .ni.on::after{display:none!important}
 
   .ni-ico{
@@ -442,11 +442,14 @@ body.dash-editing .acbanner{outline:2px solid rgba(11,165,176,.4)}
 
   /* Sidebar section labels */
   #nb .sb-section{
-    font-size:9px;font-weight:700;color:rgba(11,165,176,.7);
-    text-transform:uppercase;letter-spacing:.8px;
-    padding:14px 18px 4px;
+    font-size:9px;font-weight:800;
+    color:rgba(255,255,255,.3);
+    text-transform:uppercase;letter-spacing:1px;
+    padding:16px 18px 5px;
     flex-shrink:0;overflow:hidden;white-space:nowrap;
     transition:opacity .2s;
+    border-top:.5px solid rgba(255,255,255,.05);
+    margin-top:4px;
   }
 
   /* Sidebar toggle button */
@@ -455,18 +458,18 @@ body.dash-editing .acbanner{outline:2px solid rgba(11,165,176,.4)}
     align-items:center;justify-content:center;
     margin-top:auto;
     padding:12px 18px;
-    border-top:.5px solid rgba(255,255,255,.06);
+    border-top:.5px solid rgba(255,255,255,.08);
     cursor:pointer;
-    color:rgba(255,255,255,.35);
+    color:rgba(255,255,255,.5);
     font-size:16px;
     gap:10px;
     flex-shrink:0;
     transition:color .15s;
   }
-  #nb .sb-toggle:hover{color:rgba(255,255,255,.65)}
+  #nb .sb-toggle:hover{color:rgba(255,255,255,.85)}
   #nb .sb-toggle .sb-toggle-lbl{
-    font-size:11px;font-weight:600;
-    color:rgba(255,255,255,.3);
+    font-size:12px;font-weight:600;
+    color:rgba(255,255,255,.5);
     overflow:hidden;white-space:nowrap;
     transition:opacity .2s;
   }
@@ -633,7 +636,7 @@ var S = {
   pilot:{name:'',email:''},
   ac:{tail:'',make:'',model:'',year:'',engine:'piston',
       emptyWt:0,emptyCG:0,maxGross:0,maxFuel:0,fuelUnit:'gal',
-      cgFwdLimit:null, cgAftLimit:null},
+      cgFwdLimit:null, cgAftLimit:null, homeAirport:''},
   chatMsgs:[],isTyping:false,
   clSection:'preflight',clSt:{},
   mapInst:null,mapRoute:null,
@@ -684,7 +687,7 @@ var S = {
   myRole:'owner_admin',   // 'owner_admin'|'owner_viewer'|'crew'|'copilot'
   settings:{
     theme:'light',
-    dashOrder:['fuel','flighthours','expenses','ownerexpenses','bookings','nearest','weather','quickplan'],
+    dashOrder:['fuel','flighthours','homeweather','expenses','ownerexpenses','bookings','nearest','weather','quickplan'],
     dashHidden:[],
     dashLayout:{},   // {widgetId: {w:1|2, h:1|2}} — col span and height
     textSize:'normal',
@@ -1041,7 +1044,7 @@ function loadState(){
     if(d.pfTo)S.pfTo=d.pfTo;
     if(d.mktSaved)S.mktSaved=d.mktSaved;
     // ── Settings — always merge saved prefs but guarantee latest widgets in dashOrder
-    var LATEST_ORDER=['fuel','flighthours','expenses','ownerexpenses','bookings','nearest','weather','quickplan'];
+    var LATEST_ORDER=['fuel','flighthours','homeweather','expenses','ownerexpenses','bookings','nearest','weather','quickplan'];
     var REMOVED_WIDGETS=['stats','kpi','kpi_bar','kpi_hobbs','kpi_total','kpi_month','kpi_year','kpi_compliance','kpi_oil','kpi_charter'];
     if(d.settings){
       S.settings=Object.assign(S.settings||{},d.settings);
@@ -1298,6 +1301,7 @@ function obH(){
       +'<div class="fg"><div class="fl">Tail number / registration</div><input class="fi mn" placeholder="e.g. N12345 or HK-ABC" value="'+S.ac.tail+'" oninput="S.ac.tail=this.value.toUpperCase();this.value=S.ac.tail" maxlength="8"></div>'
       +'<div class="fr"><div class="fg"><div class="fl">Make</div><input class="fi" placeholder="e.g. Cessna" value="'+S.ac.make+'" oninput="S.ac.make=this.value"></div>'
       +'<div class="fg"><div class="fl">Model</div><input class="fi" placeholder="e.g. 172S" value="'+S.ac.model+'" oninput="S.ac.model=this.value"></div></div>'
+      +'<div class="fg"><div class="fl">Home airport (ICAO)</div><input class="fi mn" placeholder="e.g. KHWO" maxlength="6" value="'+esc(S.ac.homeAirport||'')+'" oninput="S.ac.homeAirport=this.value.toUpperCase();this.value=S.ac.homeAirport" style="text-transform:uppercase;letter-spacing:2px;font-weight:700"></div>'
       +'<div class="fg"><div class="fl">Engine type</div>'
         +'<select class="fi" onchange="S.ac.engine=this.value;S.ac.fuelUnit=(this.value===\'turboprop\'||this.value===\'jet\')?\'lbs\':\'gal\'">'
           +'<option value="piston" '+(S.ac.engine==='piston'?'selected':'')+'>Piston (single-engine)</option>'
@@ -1893,6 +1897,7 @@ var ROLE_COLORS={'owner_admin':'var(--teal)','owner_viewer':'#6b7280','crew':'#7
 function flightPlanH(){
   var r = S.aiRoute;
   var isIFR = S.flightRules==='ifr';
+  if(!S.pfFrom&&S.ac.homeAirport) S.pfFrom=S.ac.homeAirport;
   var from = S.pfFrom||'';
   var to   = S.pfTo||'';
 
@@ -2115,6 +2120,7 @@ var DASH_WIDGETS={
   quickplan:    {label:'Quick flight plan',     icon:'🗺'},
   fuel:         {label:'Fuel on board',         icon:'⛽'},
   flighthours:  {label:'Flight hours chart',    icon:'✈'},
+  homeweather:  {label:'Home airport weather',  icon:'🌤'},
   expenses:     {label:'Expenses by month',     icon:'💰'},
   ownerexpenses:{label:'Owner expense split',   icon:'👥'},
   kpi:          {label:'Flight KPIs (full)',    icon:'📈'},
@@ -2131,6 +2137,7 @@ function renderDashWidget(id,apt){
     if(h)return'';
     if(id==='kpi_bar')        return dashWidget_kpi_bar();
     if(id==='flighthours')    return dashWidget_flightHours();
+    if(id==='homeweather')    return dashWidget_homeWeather();
     if(id==='quickplan')      return dashWidget_quickplan();
     if(id==='fuel')           return dashWidget_fuel();
     if(id==='expenses')       return dashWidget_expenses();
@@ -2609,9 +2616,9 @@ function dashH(){
       +'<div style="text-align:right"><div style="font-size:12px;font-weight:700;color:var(--teal)">'+a.nm+' NM</div><div style="font-size:9px;color:var(--t3)">'+a.brg+'</div></div></div>';
   }).join('');
 
-  if(!S.settings)S.settings={theme:'light',dashOrder:['fuel','flighthours','expenses','ownerexpenses','bookings','nearest','weather','quickplan'],dashHidden:[],textSize:'normal'};
+  if(!S.settings)S.settings={theme:'light',dashOrder:['fuel','flighthours','homeweather','expenses','ownerexpenses','bookings','nearest','weather','quickplan'],dashHidden:[],textSize:'normal'};
   var order = S.settings.dashOrder || [];
-  if(!order.length) order=['fuel','flighthours','expenses','ownerexpenses','bookings','nearest','weather','quickplan'];
+  if(!order.length) order=['fuel','flighthours','homeweather','expenses','ownerexpenses','bookings','nearest','weather','quickplan'];
 
   // ── Computed quick stats for banner ─────────────────────────
   var now       = new Date();
@@ -2751,7 +2758,7 @@ function dashH(){
       var visible = order.filter(function(id){
         return DASH_WIDGETS[id] && S.settings.dashHidden.indexOf(id)<0;
       });
-      if(!visible.length)visible=['fuel','flighthours','expenses','ownerexpenses','bookings','nearest','weather','quickplan'];
+      if(!visible.length)visible=['fuel','flighthours','homeweather','expenses','ownerexpenses','bookings','nearest','weather','quickplan'];
       var w        = document.documentElement.clientWidth||window.innerWidth;
       var sbW      = (w>=768 && document.getElementById('app') && !document.getElementById('app').classList.contains('sb-hidden')) ? (_sbCollapsed?64:220) : 0;
       var avail    = w - sbW;
@@ -2801,7 +2808,7 @@ function applyTheme(theme){
 }
 
 function settingsH(){
-  if(!S.settings)S.settings={theme:'light',dashOrder:['fuel','flighthours','expenses','ownerexpenses','bookings','nearest','weather','quickplan'],dashHidden:[],textSize:'normal'};
+  if(!S.settings)S.settings={theme:'light',dashOrder:['fuel','flighthours','homeweather','expenses','ownerexpenses','bookings','nearest','weather','quickplan'],dashHidden:[],textSize:'normal'};
   var st=S.settings;
   var isDark=st.theme==='dark';
   // Ensure all known widgets are in the order (add missing ones at end)
@@ -2914,7 +2921,7 @@ function dashToggleWidget(id){
 }
 
 function dashResetLayout(){
-  S.settings.dashOrder=['fuel','flighthours','expenses','ownerexpenses','bookings','nearest','weather','quickplan'];
+  S.settings.dashOrder=['fuel','flighthours','homeweather','expenses','ownerexpenses','bookings','nearest','weather','quickplan'];
   S.settings.dashHidden=[];
   S.settings.dashLayout={};
   S.settings.textSize='normal';
@@ -2933,13 +2940,16 @@ var _dashEditing = false;
 function toggleDashEdit(){
   _dashEditing = !_dashEditing;
   document.body.classList.toggle('dash-editing', _dashEditing);
-  // Update edit button
   var btn = document.getElementById('dash-edit-btn');
   if(btn){
     btn.textContent = _dashEditing ? '✓ Done' : '⊞ Edit';
     btn.style.background = _dashEditing ? 'rgba(11,165,176,.3)' : 'rgba(255,255,255,.08)';
     btn.style.color = _dashEditing ? '#5EEAD4' : 'rgba(255,255,255,.7)';
     btn.style.border = _dashEditing ? '1px solid rgba(11,165,176,.5)' : '1px solid rgba(255,255,255,.15)';
+  }
+  if(_dashEditing){
+    var vw=document.documentElement.clientWidth||window.innerWidth;
+    if(vw<768) showToast('Hold & drag any widget to reorder','ok');
   }
   if(!_dashEditing) saveState();
 }
@@ -3000,6 +3010,7 @@ function buildWidgetGridHTML(visible, cols, apt){
   var DEFAULT_SPANS = {
     fuel:         {w:1, h:1},
     flighthours:  {w:2, h:1},
+    homeweather:  {w:1, h:1},
     quickplan:    {w:1, h:1},
     bookings:     {w:1, h:1},
     expenses:     {w:2, h:1},
@@ -3037,6 +3048,7 @@ function buildWidgetGridHTML(visible, cols, apt){
     var minH = {
       fuel:'280px', weather:'300px', quickplan:'110px',
       flighthours:'240px',
+      homeweather:'260px',
       bookings:'160px', nearest:'200px',
       expenses:'200px', ownerexpenses:'160px',
     }[id] || '120px';
@@ -3064,38 +3076,50 @@ var _dashDrag={el:null,ghost:null,fromId:null,startX:0,startY:0,offX:0,offY:0};
 function initDashDragDrop(grid){
   if(!grid)return;
 
-  // ── Touch drag ────────────────────────────────────────────────
+  // ── Touch drag — long-press anywhere on widget ────────────────
+  var _longPressTimer=null;
+  var _longPressWrap=null;
+
   grid.addEventListener('touchstart',function(e){
     if(!_dashEditing)return;
     var wrap=e.target.closest('.dash-widget-wrap');
     if(!wrap)return;
-    // Only drag from the grip handle
-    var isGrip=e.target.closest('.dcb-btn') && e.target.textContent.trim()==='⠿';
-    if(!isGrip && !e.target.closest('.dash-ctrl-bar'))return;
+    // Don't start drag if touching a button/input/select
+    if(e.target.closest('button,input,select,a,textarea'))return;
 
     var t=e.touches[0];
-    var r=wrap.getBoundingClientRect();
-    _dashDrag.fromId=wrap.dataset.id;
-    _dashDrag.el=wrap;
-    _dashDrag.offX=t.clientX-r.left;
-    _dashDrag.offY=t.clientY-r.top;
+    _longPressWrap=wrap;
 
-    var ghost=wrap.cloneNode(true);
-    ghost.className='dash-drag-ghost';
-    ghost.style.cssText='position:fixed;width:'+r.width+'px;height:'+r.height+'px;left:'+(t.clientX-_dashDrag.offX)+'px;top:'+(t.clientY-_dashDrag.offY)+'px;z-index:9999;pointer-events:none;opacity:.88;box-shadow:0 16px 48px rgba(0,0,0,.4);border-radius:14px;background:var(--card);overflow:hidden';
-    document.body.appendChild(ghost);
-    _dashDrag.ghost=ghost;
-    wrap.style.opacity='.35';
-    e.preventDefault();
-  },{passive:false});
+    // Short delay before starting drag so scroll still works
+    _longPressTimer=setTimeout(function(){
+      var r=wrap.getBoundingClientRect();
+      _dashDrag.fromId=wrap.dataset.id;
+      _dashDrag.el=wrap;
+      _dashDrag.offX=t.clientX-r.left;
+      _dashDrag.offY=t.clientY-r.top;
+
+      var ghost=wrap.cloneNode(true);
+      ghost.className='dash-drag-ghost';
+      ghost.style.cssText='position:fixed;width:'+r.width+'px;height:'+r.height+'px;left:'+(t.clientX-_dashDrag.offX)+'px;top:'+(t.clientY-_dashDrag.offY)+'px;z-index:9999;pointer-events:none;opacity:.88;box-shadow:0 16px 48px rgba(0,0,0,.4);border-radius:14px;background:var(--card);overflow:hidden;transition:transform .1s';
+      document.body.appendChild(ghost);
+      ghost.style.transform='scale(1.04)';
+      _dashDrag.ghost=ghost;
+      wrap.style.opacity='.3';
+      // Haptic feedback on supported devices
+      try{if(navigator.vibrate)navigator.vibrate(30);}catch(e){}
+    },350);
+  },{passive:true});
 
   grid.addEventListener('touchmove',function(e){
+    // Cancel long-press if user scrolls before drag starts
+    if(_longPressTimer&&!_dashDrag.ghost){
+      clearTimeout(_longPressTimer);_longPressTimer=null;
+    }
     if(!_dashDrag.ghost)return;
     var t=e.touches[0];
     _dashDrag.ghost.style.left=(t.clientX-_dashDrag.offX)+'px';
     _dashDrag.ghost.style.top=(t.clientY-_dashDrag.offY)+'px';
 
-    // Find drop target
     _dashDrag.ghost.style.display='none';
     var target=document.elementFromPoint(t.clientX,t.clientY);
     _dashDrag.ghost.style.display='';
@@ -3107,19 +3131,19 @@ function initDashDragDrop(grid){
   },{passive:false});
 
   grid.addEventListener('touchend',function(e){
+    clearTimeout(_longPressTimer);_longPressTimer=null;_longPressWrap=null;
     if(!_dashDrag.ghost)return;
     var t=e.changedTouches[0];
     _dashDrag.ghost.remove();_dashDrag.ghost=null;
     if(_dashDrag.el)_dashDrag.el.style.opacity='';
     grid.querySelectorAll('.dash-widget-wrap').forEach(function(w){w.classList.remove('drag-over');});
 
-    _dashDrag.ghost=null;
     var target=document.elementFromPoint(t.clientX,t.clientY);
     var targetWrap=target&&target.closest('.dash-widget-wrap');
     if(targetWrap&&targetWrap!==_dashDrag.el&&_dashDrag.fromId){
       var toId=targetWrap.dataset.id;
       var ord=S.settings.dashOrder;
-      var fi=ord.indexOf(_dashDrag.fromId), ti=ord.indexOf(toId);
+      var fi=ord.indexOf(_dashDrag.fromId),ti=ord.indexOf(toId);
       if(fi>=0&&ti>=0){
         ord.splice(fi,1);
         ord.splice(ti,0,_dashDrag.fromId);
@@ -3730,7 +3754,7 @@ function updateSidebarHeader(){}
 
 function renderNavBar(){
   try{
-  if(!S.settings) S.settings={theme:'light',dashOrder:['fuel','flighthours','expenses','ownerexpenses','bookings','nearest','weather','quickplan'],dashHidden:[],textSize:'normal'};
+  if(!S.settings) S.settings={theme:'light',dashOrder:['fuel','flighthours','homeweather','expenses','ownerexpenses','bookings','nearest','weather','quickplan'],dashHidden:[],textSize:'normal'};
 
   var nb = $('nb');
   if(!nb) return;
@@ -6017,6 +6041,7 @@ function profileH(){
     +'<div class="fg"><div class="fl">Tail number</div><input class="fi mn" value="'+esc(S.ac.tail)+'" placeholder="N12345" oninput="S.ac.tail=this.value.toUpperCase();this.value=S.ac.tail" onchange="saveState()"></div>'
     +'<div class="fr"><div class="fg"><div class="fl">Make</div><input class="fi" value="'+esc(S.ac.make)+'" placeholder="Cessna" oninput="S.ac.make=this.value" onchange="saveState()"></div>'
     +'<div class="fg"><div class="fl">Model</div><input class="fi" value="'+esc(S.ac.model)+'" placeholder="172S" oninput="S.ac.model=this.value" onchange="saveState()"></div></div>'
+    +'<div class="fg"><div class="fl">Home airport (ICAO)</div><input class="fi mn" value="'+esc(S.ac.homeAirport||'')+'" placeholder="e.g. KHWO" maxlength="6" oninput="S.ac.homeAirport=this.value.toUpperCase();this.value=S.ac.homeAirport" onchange="saveState()" style="letter-spacing:2px;font-weight:700;text-transform:uppercase"></div>'
     +'<div class="fr"><div class="fg"><div class="fl">Engine</div><select class="fi" onchange="S.ac.engine=this.value;saveState();refreshFuelWidget()">'
       +['piston','twin','turboprop','jet','lsa','heli','experimental','ultralight'].map(function(e){return '<option value="'+e+'" '+(S.ac.engine===e?'selected':'')+'>'+{piston:'Piston single',twin:'Piston twin',turboprop:'Turboprop',jet:'Jet',lsa:'Light Sport',heli:'Helicopter',experimental:'Experimental',ultralight:'Ultralight'}[e]+'</option>';}).join('')
     +'</select></div><div class="fg"><div class="fl">Fuel unit</div><select class="fi" onchange="S.ac.fuelUnit=this.value;saveState();refreshFuelWidget()">'
@@ -11541,6 +11566,177 @@ function dashWidget_ownerExpenses(){
 }
 
 // ═══ KPI BAR WIDGET — horizontal strip of all key metrics ═══════
+// ═══ HOME AIRPORT WEATHER WIDGET ═════════════════════════════════
+var _hwCache={icao:'',metar:null,taf:null,ts:0};
+
+function dashWidget_homeWeather(){
+  var icao=(S.ac.homeAirport||'').trim().toUpperCase();
+  var cid='hw-'+Date.now();
+
+  if(!icao){
+    return'<div class="card" style="display:flex;flex-direction:column;background:var(--navy)">'
+      +'<div style="font-size:9px;font-weight:800;color:rgba(11,165,176,.7);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">🌤 Home airport weather</div>'
+      +'<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center">'
+        +'<div style="font-size:28px;margin-bottom:8px">🏠</div>'
+        +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">No home airport set</div>'
+        +'<div style="font-size:11px;color:rgba(255,255,255,.4);margin-bottom:12px">Set your base airport in Profile</div>'
+        +'<button onclick="nav(\'profile\')" style="padding:8px 16px;background:rgba(11,165,176,.25);border:1px solid rgba(11,165,176,.4);border-radius:8px;color:#5EEAD4;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Go to Profile →</button>'
+      +'</div>'
+    +'</div>';
+  }
+
+  // Use cached data if fresh (< 10 min) and same airport
+  var now=Date.now();
+  var useCached = _hwCache.icao===icao && _hwCache.metar && (now-_hwCache.ts)<600000;
+
+  var html='<div class="card" style="display:flex;flex-direction:column;background:var(--navy);padding:12px 14px" id="'+cid+'">';
+
+  if(useCached){
+    html+=_buildHWContent(_hwCache.metar,_hwCache.taf,icao);
+  } else {
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+      +'<div>'
+        +'<div style="font-size:24px;font-weight:900;color:#fff;letter-spacing:-.5px">'+icao+'</div>'
+        +'<div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:.5px;margin-top:1px">Home airport</div>'
+      +'</div>'
+    +'</div>'
+    +'<div style="display:flex;align-items:center;gap:8px;padding:16px 0;color:rgba(255,255,255,.4)">'
+      +'<div style="width:18px;height:18px;border:2px solid rgba(11,165,176,.5);border-top-color:#0BA5B0;border-radius:50%;animation:spin 1s linear infinite;flex-shrink:0"></div>'
+      +'<div style="font-size:12px">Fetching weather...</div>'
+    +'</div>';
+    // Fetch async
+    setTimeout(function(){_fetchHomeWeather(icao,cid);},50);
+  }
+
+  html+='</div>';
+  return html;
+}
+
+async function _fetchHomeWeather(icao,cid){
+  try{
+    var metarRes=await fetch('https://aviationweather.gov/api/data/metar?ids='+icao+'&format=json');
+    var metarData=await metarRes.json();
+    var metar=metarData&&metarData[0]?metarData[0]:null;
+
+    var tafText=null;
+    try{
+      var tafRes=await fetch('https://aviationweather.gov/api/data/taf?ids='+icao+'&format=json');
+      var tafData=await tafRes.json();
+      tafText=tafData&&tafData[0]?tafData[0].rawTAF||tafData[0].raw_text:null;
+    }catch(e){}
+
+    _hwCache={icao:icao,metar:metar,taf:tafText,ts:Date.now()};
+
+    var el=document.getElementById(cid);
+    if(el) el.innerHTML=_buildHWContent(metar,tafText,icao);
+  }catch(e){
+    var el=document.getElementById(cid);
+    if(el) el.innerHTML='<div style="font-size:9px;font-weight:800;color:rgba(11,165,176,.7);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">🌤 '+icao+' WEATHER</div>'
+      +'<div style="font-size:12px;color:rgba(255,255,255,.4);padding:12px 0">Could not fetch weather — check connection</div>'
+      +'<button onclick="_fetchHomeWeather(\''+icao+'\',\''+cid+'\')" style="padding:7px 14px;background:rgba(11,165,176,.2);border:1px solid rgba(11,165,176,.3);border-radius:8px;color:#5EEAD4;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Retry</button>';
+  }
+}
+
+function _buildHWContent(metar,taf,icao){
+  if(!metar) return '<div style="font-size:9px;font-weight:800;color:rgba(11,165,176,.7);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">🌤 '+icao+' WEATHER</div><div style="font-size:12px;color:rgba(255,255,255,.4);padding:12px 0">No METAR available</div>';
+
+  // Flight rules color
+  var frColors={VFR:'#22c55e',MVFR:'#3b82f6',IFR:'#ef4444',LIFR:'#a855f7'};
+  var fr=metar.flightCategory||metar.flight_category||'VFR';
+  var frColor=frColors[fr]||'#22c55e';
+
+  // Wind
+  var windDir=metar.wdir||metar.wind_dir_degrees||0;
+  var windSpd=metar.wspd||metar.wind_speed_kt||0;
+  var windGust=metar.wgst||metar.wind_gust_kt||0;
+  var windStr=windDir==='VRB'||windDir===0?'Variable':''+windDir+'°';
+  windStr+=' at '+windSpd+' kts'+(windGust?' G'+windGust:'');
+
+  // Visibility
+  var vis=metar.visib||metar.visibility_statute_mi||'10+';
+  var visStr=vis+' SM';
+
+  // Ceiling
+  var clouds=metar.clouds||metar.sky_condition||[];
+  var ceiling='CLR';
+  if(Array.isArray(clouds)){
+    var bkn=clouds.find(function(c){return (c.cover||c.sky_cover)==='BKN'||(c.cover||c.sky_cover)==='OVC';});
+    if(bkn) ceiling=(bkn.cover||bkn.sky_cover)+' '+(bkn.base||bkn.cloud_base_ft_agl)+"'";
+    else if(clouds.length) ceiling=(clouds[0].cover||clouds[0].sky_cover||'CLR');
+  }
+
+  // Temp / Dewpoint
+  var temp=metar.temp!=null?metar.temp:(metar.temp_c!=null?metar.temp_c:'—');
+  var dew=metar.dewp!=null?metar.dewp:(metar.dewpoint_c!=null?metar.dewpoint_c:'—');
+  var altim=metar.altim||metar.altim_in_hg||metar.slp||'—';
+  var altStr=typeof altim==='number'&&altim>100?Math.round(altim)+' hPa':typeof altim==='number'?altim.toFixed(2)+'"':'—';
+
+  // Airport name
+  var aptName=metar.name||metar.station_id||icao;
+  if(aptName===icao&&metar.site) aptName=metar.site;
+
+  // Raw METAR
+  var raw=metar.rawOb||metar.raw_text||metar.rawMETAR||'';
+
+  // Obs time
+  var obsTime=metar.obsTime||metar.observation_time||'';
+  var timeStr='';
+  if(obsTime){try{var d=new Date(obsTime);timeStr=d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false})+' Z';}catch(e){}}
+
+  var html='';
+  // Header
+  html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">'
+    +'<div>'
+      +'<div style="font-size:26px;font-weight:900;color:#fff;letter-spacing:-.5px;line-height:1">'+icao+'</div>'
+      +(aptName&&aptName!==icao?'<div style="font-size:9px;font-weight:600;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.4px;margin-top:2px">'+aptName+'</div>':'')
+    +'</div>'
+    +'<div style="display:flex;gap:6px;align-items:center">'
+      +(timeStr?'<div style="font-size:9px;color:rgba(255,255,255,.3)">'+timeStr+'</div>':'')
+      +'<button onclick="_hwCache.ts=0;renderDashGrid(document.getElementById(\'dash-widget-grid\'))" style="background:rgba(255,255,255,.08);border:none;border-radius:50%;width:26px;height:26px;color:rgba(255,255,255,.5);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center">↻</button>'
+      +'<div style="background:'+frColor+'22;border:1.5px solid '+frColor+';border-radius:8px;padding:4px 10px;font-size:11px;font-weight:800;color:'+frColor+'">'+fr+'</div>'
+    +'</div>'
+  +'</div>';
+
+  // Stats row
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">';
+  [['WIND',windStr],['VIS',visStr],['ALT',altStr]].forEach(function(s){
+    html+='<div style="background:rgba(255,255,255,.06);border-radius:8px;padding:8px 8px;text-align:center">'
+      +'<div style="font-size:8px;font-weight:700;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">'+s[0]+'</div>'
+      +'<div style="font-size:12px;font-weight:800;color:#fff;line-height:1.3">'+s[1]+'</div>'
+    +'</div>';
+  });
+  html+='</div>';
+
+  // Ceiling + Temp
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">';
+  [['CEILING',ceiling],['TEMP / DEW',temp+'° / '+dew+'°']].forEach(function(s){
+    html+='<div style="background:rgba(255,255,255,.06);border-radius:8px;padding:7px 8px;text-align:center">'
+      +'<div style="font-size:8px;font-weight:700;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">'+s[0]+'</div>'
+      +'<div style="font-size:12px;font-weight:800;color:#fff">'+s[1]+'</div>'
+    +'</div>';
+  });
+  html+='</div>';
+
+  // Raw METAR
+  if(raw){
+    html+='<div style="background:rgba(255,255,255,.04);border-radius:8px;padding:8px 10px;margin-bottom:8px">'
+      +'<div style="font-size:8px;font-weight:700;color:rgba(11,165,176,.6);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">📋 RAW METAR</div>'
+      +'<div style="font-size:10px;color:rgba(255,255,255,.6);font-family:monospace;line-height:1.6;word-break:break-all">'+raw+'</div>'
+    +'</div>';
+  }
+
+  // TAF
+  if(taf){
+    html+='<div id="hw-taf" style="display:none;background:rgba(255,255,255,.04);border-radius:8px;padding:8px 10px;margin-bottom:8px">'
+      +'<div style="font-size:8px;font-weight:700;color:rgba(11,165,176,.6);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">📋 TAF</div>'
+      +'<div style="font-size:10px;color:rgba(255,255,255,.6);font-family:monospace;line-height:1.6;word-break:break-all">'+taf+'</div>'
+    +'</div>'
+    +'<button onclick="var t=document.getElementById(\'hw-taf\');t.style.display=t.style.display===\'none\'?\'block\':\'none\';this.textContent=t.style.display===\'none\'?\'☁ View TAF\':\'☁ Hide TAF\'" style="width:100%;padding:9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:rgba(255,255,255,.6);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">☁ View TAF</button>';
+  }
+
+  return html;
+}
+
 // ═══ FLIGHT HOURS CHART WIDGET ═══════════════════════════════════
 function dashWidget_flightHours(){
   // State stored on S for persistence across re-renders
@@ -12107,8 +12303,8 @@ window.addEventListener('resize',function(){
     // Ensure critical state fields exist after load
     if(!S.social)S.social={tab:'map',friends:[],clubs:[],chats:{},visible:true,myStatus:'flying',requests:[]};
     if(!S.social.friends)S.social.friends=[];
-    if(!S.settings)S.settings={theme:'light',dashOrder:['fuel','flighthours','expenses','ownerexpenses','bookings','nearest','weather','quickplan'],dashHidden:[],textSize:'normal'};
-    if(!S.settings.dashOrder)S.settings.dashOrder=['fuel','flighthours','expenses','ownerexpenses','bookings','nearest','weather','quickplan'];
+    if(!S.settings)S.settings={theme:'light',dashOrder:['fuel','flighthours','homeweather','expenses','ownerexpenses','bookings','nearest','weather','quickplan'],dashHidden:[],textSize:'normal'};
+    if(!S.settings.dashOrder)S.settings.dashOrder=['fuel','flighthours','homeweather','expenses','ownerexpenses','bookings','nearest','weather','quickplan'];
     if(!S.settings.dashHidden)S.settings.dashHidden=[];
     if(!S.reports)S.reports=[];
     if(!S.logbook)S.logbook=[];
