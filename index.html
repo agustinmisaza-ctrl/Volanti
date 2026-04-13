@@ -967,6 +967,16 @@ var _ls = (function(){
 })();
 
 var _saveTimer;
+function getApiKey(){
+  // Use key from settings if available, otherwise rely on platform (Claude artifact env)
+  return (S.settings&&S.settings.apiKey&&S.settings.apiKey.startsWith('sk-ant'))?S.settings.apiKey:null;
+}
+function getApiHeaders(){
+  var h={'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'};
+  var k=getApiKey();
+  if(k) h['x-api-key']=k;
+  return h;
+}
 function saveState(){
   clearTimeout(_saveTimer);
   _saveTimer=setTimeout(function(){
@@ -1189,7 +1199,7 @@ function go(s){
   if(s!=='lists') S.editMode=false;
   if(s!=='dash'&&_wxMap){try{_wxMap.remove();}catch(e){}  _wxMap=null;_wxLayer=null;}
   if(s!=='navscreen') navStopAll();
-  saveState(); // C3: persist on every nav
+  saveState();
   var scr=$('scr'),nb=$('nb'),mic=$('micbtn');
   var noUI=['login','onboarding'];
   var pad=isIPad();
@@ -1198,6 +1208,33 @@ function go(s){
   } else {
     nb.style.display='flex';
     mic.classList.remove('hid');
+  }
+
+  // ── Global weather alert strip ─────────────────────────────────
+  var existingAlert=document.getElementById('wx-alert-strip');
+  if(existingAlert) existingAlert.remove();
+  if(noUI.indexOf(s)<0 && _hwCache.metar && _hwCache.icao && (Date.now()-_hwCache.ts)<3600000){
+    var fr2=_hwCache.metar.flightCategory||'VFR';
+    if(fr2==='IFR'||fr2==='LIFR'||fr2==='MVFR'){
+      var isLIFR2=fr2==='LIFR',isIFR3=fr2==='IFR';
+      var ac2=isLIFR2?'#a855f7':isIFR3?'#ef4444':'#3b82f6';
+      var ab2=isLIFR2?'rgba(168,85,247,.18)':isIFR3?'rgba(239,68,68,.15)':'rgba(59,130,246,.12)';
+      var strip=document.createElement('div');
+      strip.id='wx-alert-strip';
+      strip.onclick=function(){nav('dash');};
+      strip.style.cssText='background:'+ab2+';border-bottom:1.5px solid '+ac2.replace(')',', .35)')+';padding:6px 16px;display:flex;align-items:center;gap:8px;cursor:pointer;flex-shrink:0';
+      var m2=_hwCache.metar;var det2=[];
+      if(m2.clouds&&m2.clouds.length){var bk2=m2.clouds.find(function(c){return(c.cover||c.sky_cover)==='BKN'||(c.cover||c.sky_cover)==='OVC';});if(bk2)det2.push('Ceiling '+(bk2.base||bk2.cloud_base_ft_agl||'?')+"'");}
+      if(m2.visib!=null&&m2.visib<5) det2.push('Vis '+m2.visib+' SM');
+      strip.innerHTML='<span style="font-size:14px">'+(isLIFR2?'🚫':isIFR3?'🌧':'🌦')+'</span>'
+        +'<span style="font-size:11px;font-weight:800;color:'+ac2+'">'+esc(_hwCache.icao)+' '+fr2+'</span>'
+        +(det2.length?'<span style="font-size:10px;color:'+ac2+';opacity:.7">— '+det2.join(' · ')+'</span>':'')
+        +'<span style="margin-left:auto;font-size:10px;color:'+ac2+';opacity:.6">Details ›</span>';
+      // Insert after status bar
+      var sb=$('statusbar')||scr.parentNode;
+      if(sb&&sb.parentNode) sb.parentNode.insertBefore(strip, sb.nextSibling);
+      else if(scr&&scr.parentNode) scr.parentNode.insertBefore(strip, scr);
+    }
   }
   
   switch(s){
@@ -1653,9 +1690,9 @@ async function obAILookup(){
   try{
     var res=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
-      headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      headers:getApiHeaders(),
       body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',
+        model:'claude-sonnet-4-6',
         max_tokens:2000,
         messages:[{role:'user',content:'You are an expert aviation data researcher. Find and return performance and checklist data for a '+make+' '+model+' aircraft.\n\nReturn ONLY a valid JSON object (no markdown):\n{"vspeeds":{"vso":0,"vs1":0,"vx":0,"vy":0,"va":0,"vno":0,"vne":0,"vfe":0},"performance":{"cruiseTAS":0,"cruiseFPH":0,"climbIAS":0,"climbFPM":0,"descentIAS":0,"descentFPM":0,"serviceAlt":0},"maxGross":0,"emptyWeight":0,"maxFuel":0,"cgFwdLimit":0,"cgAftLimit":0,"found":true,"notes":"brief source note"}\n\nRules:\n- Use well-known published POH data for this aircraft type\n- Use 0 for any value not confidently known\n- Set found:false if you cannot find reliable data for this specific model\n- Return JSON only'}]
       })
@@ -1760,9 +1797,9 @@ async function extractFromPOH(file){
 
     var apiResp=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
-      headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      headers:getApiHeaders(),
       body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',
+        model:'claude-sonnet-4-6',
         max_tokens:4096,
         messages:[{
           role:'user',
@@ -1901,146 +1938,193 @@ function flightPlanH(){
   var from = S.pfFrom||'';
   var to   = S.pfTo||'';
 
-  // ── Header ────────────────────────────────────────────────────
   var html = '<div class="pghd" style="display:flex;justify-content:space-between;align-items:center">'
     +'<div>'
       +'<div style="font-size:18px;font-weight:800;color:var(--t1)">Flight Planning</div>'
-      +'<div style="font-size:11px;color:var(--t3);margin-top:1px">AI route · '+S.ac.tail+' · '+(isIFR?'IFR':'VFR')+'</div>'
+      +'<div style="font-size:11px;color:var(--t3);margin-top:1px">'+S.ac.tail+(isIFR?' · IFR':' · VFR')+'</div>'
     +'</div>'
     +(r?'<button onclick="showFlightPlanExport()" style="background:var(--teal);border:none;border-radius:10px;padding:7px 14px;font-size:11px;font-weight:700;color:#fff;cursor:pointer;font-family:inherit">↑ Export</button>':'')
   +'</div>';
 
   html += '<div style="padding:12px 13px 100px">';
 
-  // ── Flight Rules toggle ───────────────────────────────────────
-  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px">'
+  // ── VFR / IFR toggle ─────────────────────────────────────────
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">'
     +['VFR','IFR'].map(function(fr){
       var sel=S.flightRules===fr.toLowerCase();
       return '<button onclick="S.flightRules=\''+fr.toLowerCase()+'\';saveState();go(\'navscreen\')" style="padding:10px;border-radius:10px;border:1.5px solid '+(sel?'var(--teal)':'var(--bd)')+';background:'+(sel?'rgba(11,165,176,.1)':'var(--card)')+';color:'+(sel?'var(--teal)':'var(--t2)')+';font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">'+(fr==='IFR'?'📡 ':' 🗺 ')+fr+'</button>';
     }).join('')
   +'</div>';
 
-  // ── DEP → DEST inputs ─────────────────────────────────────────
-  html += '<div class="card" style="background:var(--navy);border-color:rgba(11,165,176,.2);padding:14px">'
-    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">'
+  // ── Input card ────────────────────────────────────────────────
+  html += '<div class="card" style="background:var(--navy);border-color:rgba(11,165,176,.2);padding:14px;margin-bottom:10px">'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'
       +'<div style="flex:1">'
         +'<div style="font-size:9px;font-weight:700;color:rgba(11,165,176,.7);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Departure</div>'
-        +'<input id="fp-from" class="fi mn" maxlength="6" placeholder="KHWO" value="'+esc(from)+'" '
-          +'oninput="S.pfFrom=this.value.toUpperCase();this.value=S.pfFrom;saveState()" '
-          +'style="background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.15);color:#fff;font-size:18px;font-weight:800;letter-spacing:2px;padding:10px 12px">'
+        +'<input id="fp-from" class="fi mn" maxlength="6" placeholder="KHWO" value="'+esc(from)+'" oninput="S.pfFrom=this.value.toUpperCase();this.value=S.pfFrom;saveState()" style="background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.15);color:#fff;font-size:20px;font-weight:900;letter-spacing:3px;padding:10px 12px;text-align:center">'
       +'</div>'
-      +'<div style="color:var(--teal);font-size:22px;font-weight:700;padding-top:18px">→</div>'
+      +'<div style="color:var(--teal);font-size:22px;font-weight:700;padding-top:18px;flex-shrink:0">→</div>'
       +'<div style="flex:1">'
         +'<div style="font-size:9px;font-weight:700;color:rgba(11,165,176,.7);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Destination</div>'
-        +'<input id="fp-to" class="fi mn" maxlength="6" placeholder="KMIA" value="'+esc(to)+'" '
-          +'oninput="S.pfTo=this.value.toUpperCase();this.value=S.pfTo;saveState()" '
-          +'style="background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.15);color:#fff;font-size:18px;font-weight:800;letter-spacing:2px;padding:10px 12px">'
+        +'<input id="fp-to" class="fi mn" maxlength="6" placeholder="KMIA" value="'+esc(to)+'" oninput="S.pfTo=this.value.toUpperCase();this.value=S.pfTo;saveState()" style="background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.15);color:#fff;font-size:20px;font-weight:900;letter-spacing:3px;padding:10px 12px;text-align:center">'
       +'</div>'
     +'</div>'
-
-    // Cruise mode
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px">'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">'
       +['performance','economy'].map(function(m){
         var sel=S.cruiseMode===m;
         return '<button onclick="S.cruiseMode=\''+m+'\';saveState();go(\'navscreen\')" style="padding:8px;border-radius:8px;border:1px solid '+(sel?'rgba(11,165,176,.4)':'rgba(255,255,255,.1)')+';background:'+(sel?'rgba(11,165,176,.15)':'transparent')+';color:'+(sel?'#5EEAD4':'rgba(255,255,255,.4)')+';font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">'+(m==='performance'?'⚡ Performance':'🌿 Economy')+'</button>';
       }).join('')
     +'</div>'
-
-    // IFR cruise level
     +(isIFR
-      ?'<div style="margin-bottom:12px"><div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Cruise level</div>'
-        +'<select onchange="S.cruiseFL=parseInt(this.value);saveState()" style="width:100%;padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:#fff;font-size:12px;font-family:monospace;font-weight:700;cursor:pointer">'
-          +'<option value="0">Auto (AI picks)</option>'
-          +[60,80,100,120,140,160,180,210,230,250,270,290,310,330,350,370].map(function(fl){
-            return'<option value="'+fl+'" '+(S.cruiseFL===fl?'selected':'')+'>FL'+String(fl).padStart(3,'0')+(fl>=290?' RVSM':'')+'</option>';
+      ?'<div style="margin-bottom:10px"><div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">Cruise level · hemispheric rule applies</div>'
+        +'<select onchange="S.cruiseFL=parseInt(this.value);saveState()" style="width:100%;padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,.12);background:#0D1B2A;color:#fff;font-size:12px;font-family:monospace;font-weight:700;cursor:pointer;-webkit-appearance:auto">'
+          +'<option value="0">Auto (AI picks best level)</option>'
+          +[60,80,100,120,140,160,180,190,210,230,250,270,290,310,330,350,370].map(function(fl){
+            var odd=String(fl).slice(-2)==='10'||String(fl).slice(-2)==='30'||String(fl).slice(-2)==='50'||String(fl).slice(-2)==='70'||String(fl).slice(-2)==='90';
+            return'<option value="'+fl+'" '+(S.cruiseFL===fl?'selected':'')+'>FL'+String(fl).padStart(3,'0')+(fl>=290?' RVSM':'')+' — '+(odd?'Eastbound':'Westbound')+'</option>';
           }).join('')
-        +'</select></div>'
-      :'')
-
-    // Generate button
-    +'<button onclick="genRoute()" style="width:100%;padding:13px;background:linear-gradient(135deg,#0BA5B0,#077A84);border:none;border-radius:10px;color:#fff;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit;letter-spacing:.3px">'
-      +(S.routeLoading?'<span style="animation:pulse 1s infinite;display:inline-block">✦ Generating…</span>':'✦ Generate '+(isIFR?'IFR ':'VFR ')+'Route')
+        +'</select>'
+        +'<div style="font-size:9px;color:rgba(255,255,255,.2);margin-top:4px">Odd FLs: 0°–179° (E) · Even FLs: 180°–359° (W)</div>'
+      +'</div>'
+      :'<div style="margin-bottom:10px"><div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px">Cruise altitude (VFR)</div>'
+        +'<select onchange="S.cruiseFL=parseInt(this.value);saveState()" style="width:100%;padding:9px;border-radius:8px;border:1px solid rgba(255,255,255,.12);background:#0D1B2A;color:#fff;font-size:12px;font-family:monospace;font-weight:700;cursor:pointer;-webkit-appearance:auto">'
+          +'<option value="0">Auto (AI picks)</option>'
+          +[1500,2500,3500,4500,5500,6500,7500,8500,9500,10500,11500,12500].map(function(alt){
+            var odd=alt%2000===1500;
+            return'<option value="'+Math.round(alt/100)+'" '+(S.cruiseFL===Math.round(alt/100)?'selected':'')+'>'+alt.toLocaleString()+' ft MSL — '+(odd?'Eastbound':'Westbound')+'</option>';
+          }).join('')
+        +'</select>'
+        +'<div style="font-size:9px;color:rgba(255,255,255,.2);margin-top:4px">Odd+500 ft: 0°–179° (E) · Even+500 ft: 180°–359° (W)</div>'
+      +'</div>'
+    )
+    +'<button onclick="if(S.pfFrom&&S.pfTo){S.routeLoading=true;S.aiRoute=null;go(\'navscreen\');setTimeout(genRoute,200);}else{showToast(\'Enter departure and destination first\',\'error\');}" '
+      +'style="width:100%;padding:14px;background:linear-gradient(135deg,#0BA5B0,#077A84);border:none;border-radius:10px;color:#fff;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit;letter-spacing:.3px">'
+      +(S.routeLoading
+        ?'<span>✦ Generating AI route…</span>'
+        :'✦ Generate '+(isIFR?'IFR':'VFR')+' Route')
     +'</button>'
   +'</div>';
 
-  // ── Route result ─────────────────────────────────────────────
-  if(r && !S.routeLoading){
-    html += '<div class="card" style="margin-top:0;border-top:none;border-radius:0 0 12px 12px;border-top:.5px solid var(--bd)">';
+  // ── Loading state ─────────────────────────────────────────────
+  if(S.routeLoading){
+    html += '<div class="card" style="text-align:center;padding:32px 20px">'
+      +'<div style="font-size:32px;margin-bottom:10px">✦</div>'
+      +'<div style="font-size:14px;font-weight:800;color:var(--t1);margin-bottom:6px">Planning your route…</div>'
+      +'<div style="font-size:11px;color:var(--t3);line-height:1.6">Calculating airways, terrain clearance,<br>fuel requirements and phase times</div>'
+    +'</div>';
+    html += '</div>';
+    return html;
+  }
 
-    // Route string
-    html += '<div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:12px">'
-      +'<div style="font-size:9px;font-weight:800;color:var(--teal);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">'+(r.flightRules==='ifr'?'📡 IFR ROUTE':'🗺 VFR ROUTE')+'</div>'
-      +'<div style="font-size:12px;font-weight:700;color:var(--t1);font-family:monospace;line-height:1.7;word-break:break-all">'+esc((from+' '+r.route+' '+to).trim())+'</div>'
-      +'<div style="display:flex;gap:8px;margin-top:8px">'
-        +'<button onclick="copyRouteStr()" style="flex:1;padding:7px;background:var(--card);border:.5px solid var(--bd);border-radius:7px;color:var(--t1);font-size:10px;font-weight:700;cursor:pointer;font-family:inherit">📋 Copy</button>'
-        +'<button onclick="showFlightPlanExport()" style="flex:1;padding:7px;background:var(--teal);border:none;border-radius:7px;color:#fff;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit">↑ Export</button>'
+  // ── Route result ─────────────────────────────────────────────
+  if(r){
+    var isFallback = !r.sid && !r.windsAloft && (r.route||'').indexOf('DCT')>=0 && r.dist==='145 nm';
+
+    // ── Map (top — most important) ───────────────────────────────
+    html += '<div style="border-radius:12px;overflow:hidden;border:.5px solid var(--bd);margin-bottom:10px;position:relative">'
+      +'<div id="fp-map" style="height:220px;background:#1a2035"></div>'
+      +'<div style="position:absolute;top:8px;left:8px;background:rgba(6,14,24,.8);border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700;color:#fff;backdrop-filter:blur(4px)">'
+        +esc(from)+' → '+esc(to)
+      +'</div>'
+      +'<div style="position:absolute;top:8px;right:8px;background:rgba(6,14,24,.8);border-radius:6px;padding:4px 10px;font-size:10px;font-weight:800;color:'+(isIFR?'#a78bfa':'#5eead4')+';backdrop-filter:blur(4px)">'
+        +(r.flightRules==='ifr'?'IFR':'VFR')
       +'</div>'
     +'</div>';
 
-    // Stats grid
-    var stats=[
-      ['ETE',r.ete||'—'],
-      ['Distance',r.dist||'—'],
-      ['Altitude',r.altitude||'—'],
-      ['MEA',r.mea||'—'],
-      ['Fuel total',r.fuelTotal||'—'],
-      ['Fuel cruise',r.fuelCruise||'—'],
-    ];
-    if(r.sid)stats.push(['SID',r.sid]);
-    if(r.star)stats.push(['STAR',r.star]);
-    if(r.alternate)stats.push(['Alternate',r.alternate]);
+    // ── Fallback warning ──────────────────────────────────────────
+    if(isFallback){
+      html += '<div style="background:#FEF3C7;border:.5px solid #FCD34D;border-radius:8px;padding:10px 12px;margin-bottom:10px;display:flex;gap:8px;align-items:flex-start">'
+        +'<span style="font-size:16px;flex-shrink:0">⚠️</span>'
+        +'<div style="font-size:11px;color:#92400E;line-height:1.5"><b>Estimated route only.</b> AI planning unavailable — check your connection. Values are calculated from aircraft performance data. Verify with ForeFlight or 1800wxbrief before flight.</div>'
+      +'</div>';
+    }
 
-    // Cost estimate
-    var fuelNum=parseFloat((r.fuelTotal||'').replace(/[^0-9.]/g,''))||0;
-    var fuelCost=fuelNum>0?Math.round(fuelNum*(S.fuelPrice||6.5)):0;
-    if(fuelCost>0)stats.push(['Est. fuel cost','$'+fuelCost.toLocaleString()]);
+    // ── Route string ─────────────────────────────────────────────
+    html += '<div class="card" style="margin-bottom:10px">'
+      +'<div style="font-size:9px;font-weight:800;color:var(--teal);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">'+(r.flightRules==='ifr'?'📡 IFR Route':'🗺 VFR Route')+'</div>'
+      +'<div style="font-size:13px;font-weight:700;color:var(--t1);font-family:monospace;line-height:1.8;word-break:break-all;background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:8px">'+esc((from+' '+(r.route||'DCT')+' '+to).trim())+'</div>'
+      +'<div style="display:flex;gap:6px">'
+        +'<button onclick="copyRouteStr()" style="flex:1;padding:8px;background:var(--bg);border:.5px solid var(--bd);border-radius:8px;color:var(--t1);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">📋 Copy</button>'
+        +(r.sid?'<button onclick="" style="flex:1;padding:8px;background:var(--bg);border:.5px solid var(--bd);border-radius:8px;color:var(--t1);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">SID: '+esc(r.sid)+'</button>':'')
+        +(r.star?'<button onclick="" style="flex:1;padding:8px;background:var(--bg);border:.5px solid var(--bd);border-radius:8px;color:var(--t1);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">STAR: '+esc(r.star)+'</button>':'')
+      +'</div>'
+    +'</div>';
 
-    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px">';
-    stats.forEach(function(s){
-      html += '<div style="background:var(--bg);border-radius:8px;padding:8px 10px">'
-        +'<div style="font-size:8px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">'+s[0]+'</div>'
-        +'<div style="font-size:13px;font-weight:800;color:var(--t1)">'+esc(s[1])+'</div>'
+    // ── Key stats ─────────────────────────────────────────────────
+    html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px">';
+    [
+      ['ETE',r.ete||'—','🕐'],
+      ['Distance',r.dist||'—','📏'],
+      ['Altitude',r.altitude||'—','⬆'],
+      ['Fuel',r.fuelTotal||'—','⛽'],
+      [r.alternate?'Alternate':'MEA',r.alternate||r.mea||'—','🛬'],
+      ['Cruise spd',r.cruiseSpeed||'—','💨'],
+    ].forEach(function(s){
+      html += '<div style="background:var(--card);border:.5px solid var(--bd);border-radius:10px;padding:10px 8px;text-align:center">'
+        +'<div style="font-size:11px;margin-bottom:3px">'+s[2]+'</div>'
+        +'<div style="font-size:12px;font-weight:800;color:var(--t1);line-height:1.2">'+esc(s[1])+'</div>'
+        +'<div style="font-size:8px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.3px;margin-top:2px">'+s[0]+'</div>'
       +'</div>';
     });
     html += '</div>';
 
-    // Winds / Weather
-    if(r.windsAloft||r.weather){
-      html += '<div style="background:rgba(11,165,176,.06);border:.5px solid rgba(11,165,176,.2);border-radius:8px;padding:10px 12px;margin-bottom:12px">';
-      if(r.windsAloft) html += '<div style="font-size:11px;color:var(--t1);margin-bottom:4px">💨 <b>Winds aloft:</b> '+esc(r.windsAloft)+'</div>';
-      if(r.weather)    html += '<div style="font-size:11px;color:var(--t1)">🌤 <b>Weather:</b> '+esc(r.weather)+'</div>';
-      html += '</div>';
+    // ── Phase breakdown ───────────────────────────────────────────
+    if(r.timeClimb||r.timeCruise){
+      html += '<div class="card" style="margin-bottom:10px">'
+        +'<div style="font-size:9px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Phase breakdown</div>'
+        +'<div style="display:flex;gap:6px">';
+      [['🛫 Climb',r.timeClimb,r.fuelClimb,'#22c55e'],['✈ Cruise',r.timeCruise,r.fuelCruise,'var(--teal)'],['🛬 Descent',r.timeDescent,r.fuelDescent,'#f59e0b']].forEach(function(ph){
+        html += '<div style="flex:1;background:var(--bg);border-radius:8px;padding:10px 6px;text-align:center">'
+          +'<div style="font-size:9px;font-weight:800;color:'+ph[3]+';margin-bottom:4px">'+ph[0]+'</div>'
+          +'<div style="font-size:13px;font-weight:900;color:var(--t1)">'+esc(ph[1]||'—')+'</div>'
+          +'<div style="font-size:9px;color:var(--t3);margin-top:2px">'+esc(ph[2]||'')+'</div>'
+        +'</div>';
+      });
+      html += '</div></div>';
     }
 
-    // Terrain warning
-    if(r.terrainWarning){
-      html += '<div style="background:#FEF3C7;border:.5px solid #FCD34D;border-radius:8px;padding:10px 12px;margin-bottom:12px">'
-        +'<div style="font-size:11px;font-weight:700;color:#92400E">⛰ '+esc(r.terrainWarning)+'</div>'
+    // ── Winds / Weather / Terrain ─────────────────────────────────
+    html += '<div class="card" style="margin-bottom:10px">';
+    if(r.terrainWarning) html += '<div style="background:#FEF3C7;border-radius:8px;padding:9px 12px;margin-bottom:8px;font-size:11px;font-weight:700;color:#92400E">⛰ '+esc(r.terrainWarning)+'</div>';
+    if(r.windsAloft){
+      html += '<div style="font-size:11px;color:var(--t1);margin-bottom:8px;padding-bottom:8px;border-bottom:.5px solid var(--bd)">💨 <b>Winds aloft:</b> '+esc(r.windsAloft)+'</div>';
+    } else {
+      html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding-bottom:8px;border-bottom:.5px solid var(--bd)">'
+        +'<div style="font-size:11px;color:var(--t3)">💨 Winds aloft — check external source</div>'
+        +'<a href="https://aviationweather.gov/windtemp" target="_blank" style="font-size:10px;font-weight:700;color:var(--teal);text-decoration:none">NOAA ↗</a>'
+      +'</div>';
+    }
+    if(r.weather){
+      html += '<div style="font-size:11px;color:var(--t1);margin-bottom:8px;padding-bottom:8px;border-bottom:.5px solid var(--bd)">🌤 <b>En route wx:</b> '+esc(r.weather)+'</div>';
+    } else {
+      html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding-bottom:8px;border-bottom:.5px solid var(--bd)">'
+        +'<div style="font-size:11px;color:var(--t3)">🌤 En route weather — check 1800wxbrief</div>'
+        +'<a href="https://1800wxbrief.com" target="_blank" style="font-size:10px;font-weight:700;color:var(--teal);text-decoration:none">Brief ↗</a>'
+      +'</div>';
+    }
+    if(r.notes) html += '<div style="font-size:11px;color:var(--t2)">📋 '+esc(r.notes)+'</div>';
+    html += '<div style="display:flex;gap:6px;margin-top:8px">'
+      +'<a href="https://aviationweather.gov/windtemp" target="_blank" style="flex:1;padding:7px;background:var(--bg);border:.5px solid var(--bd);border-radius:8px;color:var(--teal);font-size:10px;font-weight:700;text-decoration:none;text-align:center">Winds aloft ↗</a>'
+      +'<a href="https://1800wxbrief.com" target="_blank" style="flex:1;padding:7px;background:var(--bg);border:.5px solid var(--bd);border-radius:8px;color:var(--teal);font-size:10px;font-weight:700;text-decoration:none;text-align:center">1800wxbrief ↗</a>'
+      +'<a href="https://skyvector.com/?chart=world&fpl='+encodeURIComponent((S.pfFrom||'')+' '+(r.route||'DCT')+' '+(S.pfTo||''))+'" target="_blank" style="flex:1;padding:7px;background:var(--bg);border:.5px solid var(--bd);border-radius:8px;color:var(--teal);font-size:10px;font-weight:700;text-decoration:none;text-align:center">SkyVector ↗</a>'
+    +'</div>'
+    +'</div>';
+
+    // ── Fuel cost estimate ────────────────────────────────────────
+    var fuelNum=parseFloat((r.fuelTotal||'').replace(/[^0-9.]/g,''))||0;
+    var fuelCost=fuelNum>0?Math.round(fuelNum*(S.fuelPrice||6.5)):0;
+    if(fuelCost>0){
+      html += '<div style="background:var(--bg);border:.5px solid var(--bd);border-radius:8px;padding:10px 12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">'
+        +'<div style="font-size:11px;color:var(--t3)">⛽ Est. fuel cost @ $'+(S.fuelPrice||6.5)+'/'+((S.ac.fuelUnit||'gal'))+'</div>'
+        +'<div style="font-size:14px;font-weight:800;color:var(--t1)">$'+fuelCost.toLocaleString()+'</div>'
       +'</div>';
     }
 
-    // Phase breakdown
-    if(r.timeClimb||r.timeCruise){
-      html += '<div style="font-size:9px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Phase breakdown</div>'
-        +'<div style="display:flex;gap:4px;margin-bottom:12px">';
-      [['Climb',r.timeClimb,r.fuelClimb,'#22c55e'],['Cruise',r.timeCruise,r.fuelCruise,'var(--teal)'],['Descent',r.timeDescent,r.fuelDescent,'#f59e0b']].forEach(function(ph){
-        html += '<div style="flex:1;background:var(--bg);border-radius:8px;padding:8px 6px;text-align:center">'
-          +'<div style="font-size:9px;font-weight:700;color:'+ph[3]+';margin-bottom:3px">'+ph[0]+'</div>'
-          +'<div style="font-size:11px;font-weight:800;color:var(--t1)">'+esc(ph[1]||'—')+'</div>'
-          +'<div style="font-size:9px;color:var(--t3)">'+esc(ph[2]||'')+'</div>'
-        +'</div>';
-      });
-      html += '</div>';
-    }
-
-    // Route map
-    html += '<div style="font-size:9px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Route map</div>'
-      +'<div id="fp-map" style="height:220px;border-radius:10px;overflow:hidden;background:#1a2035;border:.5px solid var(--bd);margin-bottom:12px"></div>';
-
-    html += '</div>'; // card
+    // ── Export bar ────────────────────────────────────────────────
+    html += '<button onclick="showFlightPlanExport()" style="width:100%;padding:12px;background:var(--navy);border:.5px solid var(--bd);border-radius:10px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">↑ Export to ForeFlight / SkyVector / Copy</button>';
   }
 
-  html += '</div>'; // padding
+  html += '</div>';
   return html;
 }
 
@@ -2074,43 +2158,89 @@ function showFlightPlanExport(){
 }
 
 // Init route map after render
-function initRouteMap(){
+async function initRouteMap(){
   var mapEl=document.getElementById('fp-map');
-  if(!mapEl||!S.aiRoute)return;
+  if(!mapEl||!S.aiRoute||!window.L)return;
+  var from=S.pfFrom, to=S.pfTo;
+  var r=S.aiRoute;
+
+  var KNOWN={
+    KHWO:[26.001,-80.240],KMIA:[25.796,-80.287],KTPA:[27.975,-82.533],
+    KMCO:[28.429,-81.309],KFLL:[26.072,-80.151],KPBI:[26.683,-80.095],
+    KOPF:[25.907,-80.278],KFXE:[26.197,-80.170],KRSW:[26.536,-81.755],
+    KBOS:[42.365,-71.009],KJFK:[40.640,-73.779],KLGA:[40.777,-73.873],
+    KEWR:[40.690,-74.175],KORD:[41.978,-87.905],KATL:[33.641,-84.427],
+    KDFW:[32.897,-97.038],KLAX:[33.943,-118.408],KSFO:[37.619,-122.375],
+    KSEA:[47.450,-122.309],KDEN:[39.856,-104.674],KPHX:[33.435,-112.009],
+    KLAS:[36.080,-115.152],KDCA:[38.851,-77.038],KIAD:[38.944,-77.456],
+    EGLL:[51.477,-0.461],EGKK:[51.148,-0.190],LFPG:[49.013,2.550],
+    LEMD:[40.471,-3.557],LEBL:[41.297,2.078],EHAM:[52.310,4.769],
+    EDDF:[50.033,8.571],LIRF:[41.804,12.252],
+    SKBO:[4.702,-74.147],SKCG:[10.442,-75.512],SKMD:[6.220,-75.590],
+    SKPE:[7.507,-75.741],SKRG:[6.165,-75.429],SKSM:[11.119,-74.228],
+    SKBQ:[10.890,-74.781],SKCL:[3.543,-76.382],SKSP:[6.653,-71.818],
+    SKVV:[4.169,-73.615],SKUI:[5.690,-76.640],SKPV:[3.855,-77.414],
+    MHTG:[14.061,-87.217],MMMX:[19.436,-99.072],MMUN:[21.037,-86.877],
+    TXKF:[32.364,-64.679],MROC:[9.994,-84.209],MPTO:[8.975,-79.384],
+  };
+
+  // Get airport coords — try KNOWN first then aviationweather API
+  async function getCoords(icao){
+    if(KNOWN[icao]) return KNOWN[icao];
+    try{
+      var res=await fetch('https://aviationweather.gov/api/data/airport?ids='+icao+'&format=json');
+      var d=await res.json();
+      if(d&&d[0]&&d[0].lat) return [d[0].lat,d[0].lon];
+    }catch(e){}
+    return null;
+  }
+
   try{
-    if(window.L&&S.pfFrom&&S.pfTo){
-      var map=L.map('fp-map',{zoomControl:false,attributionControl:false});
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-      // Approximate positions using airport lookup
-      var KNOWN={
-        KHWO:[26.001,-80.240],KMIA:[25.796,-80.287],KTPA:[27.975,-82.533],
-        KMCO:[28.429,-81.309],KFLL:[26.072,-80.151],KPBI:[26.683,-80.095],
-        KOPF:[25.907,-80.278],KFXE:[26.197,-80.170],KRSW:[26.536,-81.755],
-        KBOS:[42.365,-71.009],KJFK:[40.640,-73.779],KLGA:[40.777,-73.873],
-        KEWR:[40.690,-74.175],KORD:[41.978,-87.905],KMDW:[41.786,-87.752],
-        KATL:[33.641,-84.427],KDFW:[32.897,-97.038],KLAX:[33.943,-118.408],
-        KSFO:[37.619,-122.375],KSEA:[47.450,-122.309],KDEN:[39.856,-104.674],
-        KPHX:[33.435,-112.009],KLAS:[36.080,-115.152],KDCA:[38.851,-77.038],
-        KIAD:[38.944,-77.456],KBWI:[39.177,-76.669],EGLL:[51.477,-0.461],
-        EGKK:[51.148,-0.190],LFPG:[49.013,2.550],LEMD:[40.471,-3.557],
-        LEBL:[41.297,2.078],EHAM:[52.310,4.769],EDDF:[50.033,8.571],
-        LIRF:[41.804,12.252],SKBO:[4.702,-74.147],SKCG:[10.442,-75.512],
-        SKMD:[6.220,-75.590],SKPE:[7.507,-75.741],MHTG:[14.061,-87.217],
-        MMMX:[19.436,-99.072],MMUN:[21.037,-86.877],TXKF:[32.364,-64.679],
-      };
-      var fromPos=KNOWN[S.pfFrom];
-      var toPos=KNOWN[S.pfTo];
-      if(fromPos&&toPos){
-        var mkr=L.divIcon({className:'',html:'<div style="background:#0BA5B0;width:10px;height:10px;border-radius:50%;border:2px solid #fff"></div>',iconSize:[10,10]});
-        L.marker(fromPos,{icon:mkr}).addTo(map).bindTooltip(S.pfFrom,{permanent:true,direction:'top',className:'',offset:[0,-6]});
-        L.marker(toPos,{icon:mkr}).addTo(map).bindTooltip(S.pfTo,{permanent:true,direction:'top',className:'',offset:[0,-6]});
-        L.polyline([fromPos,toPos],{color:'#0BA5B0',weight:2.5,dashArray:'6 4',opacity:.85}).addTo(map);
-        map.fitBounds([fromPos,toPos],{padding:[30,30]});
-      } else {
-        map.setView([25,-80],5);
-      }
+    // Destroy existing map instance if any
+    if(mapEl._leaflet_id){
+      try{mapEl._leaflet_id=null;while(mapEl.firstChild)mapEl.removeChild(mapEl.firstChild);}catch(e){}
     }
-  }catch(e){}
+    var map=L.map('fp-map',{zoomControl:false,attributionControl:false,dragging:true,scrollWheelZoom:false});
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:14}).addTo(map);
+
+    var fromPos=await getCoords(from);
+    var toPos=await getCoords(to);
+    if(!fromPos||!toPos){map.setView([25,-80],5);return;}
+
+    // Parse route waypoints — strip airways (2+ letters + digit = airway), keep fixes
+    var routeParts=(r.route||'').split(/\s+/).filter(function(p){
+      if(!p||p==='DCT'||p==='DIRECT') return false;
+      // Keep ICAO identifiers (4-5 chars all letters) and fixes (3-5 chars)
+      // Skip airways like UA502, J146, Q11, T213 etc
+      return !/^[A-Z]{1,2}\d/.test(p);
+    });
+
+    // Try to resolve intermediate waypoints
+    var waypoints=[fromPos];
+    for(var i=0;i<Math.min(routeParts.length,5);i++){
+      var wp=KNOWN[routeParts[i]];
+      if(wp) waypoints.push(wp);
+      // For fixes we can't resolve, interpolate along the route
+    }
+    waypoints.push(toPos);
+
+    // Draw route line
+    L.polyline(waypoints,{color:'#0BA5B0',weight:2.5,opacity:.9}).addTo(map);
+
+    // Markers
+    var endIcon=L.divIcon({className:'',html:'<div style="background:#DC2626;width:10px;height:10px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 6px rgba(220,38,38,.6)"></div>',iconSize:[10,10],iconAnchor:[5,5]});
+    var midIcon=L.divIcon({className:'',html:'<div style="background:#0BA5B0;width:7px;height:7px;border-radius:50%;border:1.5px solid #fff"></div>',iconSize:[7,7],iconAnchor:[3.5,3.5]});
+
+    L.marker(fromPos,{icon:endIcon}).addTo(map).bindTooltip(from,{permanent:true,direction:'top',className:'fp-tooltip',offset:[0,-8]});
+    L.marker(toPos,{icon:endIcon}).addTo(map).bindTooltip(to,{permanent:true,direction:'top',className:'fp-tooltip',offset:[0,-8]});
+
+    // Plot resolved waypoints
+    waypoints.slice(1,-1).forEach(function(wp,i){
+      L.marker(wp,{icon:midIcon}).addTo(map).bindTooltip(routeParts[i]||'',{direction:'top',className:'fp-tooltip',offset:[0,-6]});
+    });
+
+    map.fitBounds(waypoints,{padding:[40,40]});
+  }catch(e){console.warn('Map error:',e);}
 }
 
 // ═══ DASHBOARD ═══════════════════════════════════════════════════
@@ -2712,7 +2842,7 @@ function dashH(){
         // Hobbs
         tiles+=tile('Hobbs',hobbsTotal.toFixed(1),'engine hrs',null,'var(--teal)',"showHobbsModal()");
         // Month
-        tiles+=tile(MONTHS[thisMonth],monthHrs2>0?monthHrs2.toFixed(1):'—','hrs',pct(monthHrs2,prevMonthHrs2),'#fff',"nav('logs')");
+        tiles+=tile('Month',monthHrs2>0?monthHrs2.toFixed(1):'—',['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][thisMonth]+' hrs',pct(monthHrs2,prevMonthHrs2),'#fff',"nav('logs')");
         // Year
         tiles+=tile(String(thisYear),yearHrs2>0?yearHrs2.toFixed(1):'—','YTD',pct(yearHrs2,lastYearHrs2),'#fff',"nav('logs')");
         // Fuel
@@ -2759,7 +2889,7 @@ function dashH(){
         return DASH_WIDGETS[id] && S.settings.dashHidden.indexOf(id)<0;
       });
       if(!visible.length)visible=['fuel','flighthours','homeweather','expenses','ownerexpenses','bookings','nearest','weather','quickplan'];
-      var w        = document.documentElement.clientWidth||window.innerWidth;
+      var _dEl=document.getElementById("app")||document.querySelector(".device");var w=_dEl?_dEl.getBoundingClientRect().width:(document.documentElement.clientWidth||window.innerWidth);
       var sbW      = (w>=768 && document.getElementById('app') && !document.getElementById('app').classList.contains('sb-hidden')) ? (_sbCollapsed?64:220) : 0;
       var avail    = w - sbW;
       var cols     = avail>=1400?4 : avail>=900?3 : avail>=600?2 : 1;
@@ -2773,6 +2903,40 @@ function dashH(){
         var diff=Math.round((new Date(ex.date)-now)/86400000);
         return diff<=30;
       });
+      // ── Weather alert bar (IFR/MVFR at home airport) ─────────────
+      var wxAlertBar = '';
+      if(_hwCache.metar && _hwCache.icao && (now - _hwCache.ts) < 3600000){
+        var fr = _hwCache.metar.flightCategory || 'VFR';
+        var wxIcao = _hwCache.icao;
+        if(fr === 'IFR' || fr === 'LIFR' || fr === 'MVFR'){
+          var isLIFR = fr === 'LIFR';
+          var isIFR2 = fr === 'IFR';
+          var isMVFR = fr === 'MVFR';
+          var wxColor = isLIFR ? '#a855f7' : isIFR2 ? '#ef4444' : '#3b82f6';
+          var wxBg    = isLIFR ? 'rgba(168,85,247,.15)' : isIFR2 ? 'rgba(239,68,68,.13)' : 'rgba(59,130,246,.1)';
+          var wxBd    = isLIFR ? 'rgba(168,85,247,.4)'  : isIFR2 ? 'rgba(239,68,68,.35)'  : 'rgba(59,130,246,.3)';
+          var wxIcon  = isLIFR ? '🚫' : isIFR2 ? '🌧' : '🌦';
+          var m = _hwCache.metar;
+          var wxDetail = [];
+          if(m.clouds && m.clouds.length){
+            var bkn = m.clouds.find(function(c){return(c.cover||c.sky_cover)==='BKN'||(c.cover||c.sky_cover)==='OVC';});
+            if(bkn) wxDetail.push('Ceiling '+(bkn.base||bkn.cloud_base_ft_agl||'?')+"' "+(bkn.cover||bkn.sky_cover));
+          }
+          if(m.visib!=null && m.visib<5) wxDetail.push('Vis '+m.visib+' SM');
+          if(m.wspd && m.wspd>15) wxDetail.push('Wind '+m.wspd+'kts'+(m.wgst?' G'+m.wgst:''));
+          var frLabel = {IFR:'IFR — IMC conditions',LIFR:'LIFR — Extremely low visibility',MVFR:'MVFR — Marginal VFR'}[fr]||fr;
+          wxAlertBar = '<div onclick="S.settings.wxAlertDismissed=null;nav(\'dash\')" style="margin:'+padV+'px '+padH+'px 0;background:'+wxBg+';border:1.5px solid '+wxBd+';border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;position:relative">'
+            +'<div style="width:36px;height:36px;border-radius:50%;background:'+wxBg+';border:1.5px solid '+wxBd+';display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">'+wxIcon+'</div>'
+            +'<div style="flex:1;min-width:0">'
+              +'<div style="font-size:12px;font-weight:800;color:'+wxColor+';letter-spacing:.2px">'+esc(wxIcao)+' — '+frLabel+'</div>'
+              +(wxDetail.length?'<div style="font-size:11px;color:'+wxColor+';opacity:.75;margin-top:2px;line-height:1.4">'+wxDetail.join(' · ')+'</div>':'')
+              +'<div style="font-size:10px;color:'+wxColor+';opacity:.5;margin-top:2px">Tap to view weather widget</div>'
+            +'</div>'
+            +'<span style="color:'+wxColor+';font-size:18px;opacity:.5">›</span>'
+          +'</div>';
+        }
+      }
+
       var alertBar = dueItems.length>0
         ?'<div class="duebar" onclick="nav(\'logs\')" style="margin:'+padV+'px '+padH+'px 0">'
           +'<div style="width:6px;height:6px;border-radius:50%;background:var(--red);flex-shrink:0"></div>'
@@ -2783,7 +2947,7 @@ function dashH(){
         +'</div>'
         :'';
 
-      return alertBar
+      return wxAlertBar + alertBar
         +'<div id="dash-widget-grid" style="display:grid;grid-template-columns:repeat('+cols+',1fr);gap:'+gap+'px;padding:'+padV+'px '+padH+'px '+(cols===1?80:110)+'px;align-items:stretch">'
           +buildWidgetGridHTML(visible, cols, apt)
         +'</div>';
@@ -2826,6 +2990,20 @@ function settingsH(){
     +'</div>'
   +'</div>'
   +'<div style="padding:10px 13px 100px;overflow-y:auto">'
+
+  // ── AI / API KEY ──────────────────────────────────────────────
+  +'<div class="seclbl">AI Features</div>'
+  +'<div class="card">'
+    +'<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:4px">Anthropic API Key</div>'
+    +'<div style="font-size:11px;color:var(--t3);line-height:1.5;margin-bottom:10px">Required for AI Chat, route planning, and POH extraction. Get your key at <a href="https://console.anthropic.com" target="_blank" style="color:var(--teal);text-decoration:none">console.anthropic.com</a>. Stored locally on your device only.</div>'
+    +'<input class="fi" type="password" id="apikey-input" placeholder="sk-ant-api03-..." value="'+(S.settings.apiKey?'sk-ant-...'+S.settings.apiKey.slice(-6):'')+'" onfocus="if(this.value.startsWith(\'sk-ant-...\'))this.value=\'\'" onblur="if(!this.value&&S.settings.apiKey)this.value=\'sk-ant-...\'+S.settings.apiKey.slice(-6)" oninput="S.settings.apiKey=this.value.trim();saveState()" style="font-family:monospace;font-size:12px;letter-spacing:.5px">'
+    +'<div style="display:flex;align-items:center;gap:6px;margin-top:8px">'
+      +(S.settings.apiKey&&S.settings.apiKey.startsWith('sk-ant')
+        ?'<div style="display:flex;align-items:center;gap:4px"><div style="width:7px;height:7px;border-radius:50%;background:#22c55e"></div><span style="font-size:11px;color:#22c55e;font-weight:600">API key saved</span></div>'
+        :'<div style="display:flex;align-items:center;gap:4px"><div style="width:7px;height:7px;border-radius:50%;background:#ef4444"></div><span style="font-size:11px;color:#ef4444;font-weight:600">No API key — AI features disabled</span></div>'
+      )
+    +'</div>'
+  +'</div>'
 
     // ── APPEARANCE ────────────────────────────────────────────
     +'<div class="seclbl">Appearance</div>'
@@ -2993,8 +3171,9 @@ function renderDashGrid(grid){
   }).join('');
 
   var hidden=S.settings.dashHidden||[];
-  var visible=order.filter(function(id){return DASH_WIDGETS[id]&&hidden.indexOf(id)<0;});
-  var w=document.documentElement.clientWidth||window.innerWidth;
+  var order=(S.settings.dashOrder||['fuel','flighthours','homeweather','expenses','ownerexpenses','bookings','nearest','weather','quickplan']).filter(function(id){return DASH_WIDGETS[id];});
+  var visible=order.filter(function(id){return hidden.indexOf(id)<0;});
+  var _dEl2=document.getElementById("app")||document.querySelector(".device");var w=_dEl2?_dEl2.getBoundingClientRect().width:(document.documentElement.clientWidth||window.innerWidth);
   var sidebarW=(w>=768&&!document.getElementById('app').classList.contains('sb-hidden'))?(_sbCollapsed?64:220):0;
   var avail=w-sidebarW;
   var cols=avail>=1400?4:avail>=900?3:avail>=600?2:1;
@@ -3760,7 +3939,9 @@ function renderNavBar(){
   if(!nb) return;
   var active = S.screen||'dash';
   // Use clientWidth for more reliable mobile detection (ignores scrollbar, works in iframes)
-  var vw = document.documentElement.clientWidth || window.innerWidth;
+  // Measure the actual app container, not the document (avoids iframe/embed issues)
+  var _appEl = document.getElementById('app') || document.querySelector('.device');
+  var vw = _appEl ? _appEl.getBoundingClientRect().width : (document.documentElement.clientWidth || window.innerWidth);
   var isMobile = vw < 768;
 
   // Show/hide hamburger on mobile
@@ -5362,7 +5543,7 @@ async function xlsAIMapColumns() {
         'anthropic-dangerous-direct-browser-access': 'true'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 800,
         messages: [{
           role: 'user',
@@ -5969,7 +6150,7 @@ async function calcPerf(type){
   var hw=Math.round(pd.windSpd*Math.cos((pd.rwyHdg-pd.windDir)*Math.PI/180));
   var wt=Math.round(S.ac.emptyWt+S.wbSt.reduce(function(a,s){return a+s.w;},0)+S.fuel*(S.ac.fuelUnit==='lbs'?1:6));
   try{
-    var res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:250,system:'Aviation performance calculator for a '+S.ac.make+' '+S.ac.model+' ('+S.ac.engine+'). Respond ONLY with raw JSON (no markdown). Schema: {gr:number,d50:number,note:string|null}. gr = ground roll ft, d50 = distance over 50ft obstacle ft.',messages:[{role:'user',content:type+' performance: OAT '+pd.oat+'°C, PA '+pd.elev+'ft, Rwy '+pd.rwyLen+'ft, HW '+Math.abs(hw)+'kts, Weight '+wt+'lbs, Rwy '+pd.rwyC+'. Return JSON.'}]})});
+    var res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:getApiHeaders(),body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:250,system:'Aviation performance calculator for a '+S.ac.make+' '+S.ac.model+' ('+S.ac.engine+'). Respond ONLY with raw JSON (no markdown). Schema: {gr:number,d50:number,note:string|null}. gr = ground roll ft, d50 = distance over 50ft obstacle ft.',messages:[{role:'user',content:type+' performance: OAT '+pd.oat+'°C, PA '+pd.elev+'ft, Rwy '+pd.rwyLen+'ft, HW '+Math.abs(hw)+'kts, Weight '+wt+'lbs, Rwy '+pd.rwyC+'. Return JSON.'}]})});
     var data=await res.json();
     var raw=(data.content&&data.content[0]&&data.content[0].text)||'{}';
     raw=raw.replace(/```json|```/g,'').trim();
@@ -6373,9 +6554,9 @@ async function logbookAIMapColumns(){
   try{
     var res=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
-      headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      headers:getApiHeaders(),
       body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',
+        model:'claude-sonnet-4-6',
         max_tokens:800,
         messages:[{role:'user',content:
           'Map these logbook CSV column headers to aviation logbook fields.\n\n'
@@ -8059,7 +8240,7 @@ function navInitMapView(){
   if(NAV._map){try{NAV._map.remove();}catch(e){}NAV._map=null;}
   var d=navCurr();
   try{
-    var m=L.map('navmap',{zoomControl:true,attributionControl:false,preferCanvas:true}).setView([d.lat,d.lng],10);
+    var _mc1=document.getElementById('navmap');if(_mc1&&_mc1._leaflet_id){_mc1._leaflet_id=null;while(_mc1.firstChild)_mc1.removeChild(_mc1.firstChild);}var m=L.map('navmap',{zoomControl:true,attributionControl:false,preferCanvas:true}).setView([d.lat,d.lng],10);
     NAV._map=m;
     navSetMapTiles();
     // Plane marker
@@ -8158,7 +8339,7 @@ function navInitInsetMap(){
   if(NAV._insetMap){try{NAV._insetMap.remove();}catch(e){}NAV._insetMap=null;}
   var d=navCurr();
   try{
-    var m=L.map('nav-inset-map',{zoomControl:false,attributionControl:false,dragging:false,scrollWheelZoom:false}).setView([d.lat,d.lng],11);
+    var _mc2=document.getElementById('nav-inset-map');if(_mc2&&_mc2._leaflet_id){_mc2._leaflet_id=null;while(_mc2.firstChild)_mc2.removeChild(_mc2.firstChild);}var m=L.map('nav-inset-map',{zoomControl:false,attributionControl:false,dragging:false,scrollWheelZoom:false}).setView([d.lat,d.lng],11);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:14}).addTo(m);
     NAV._insetMap=m;
     NAV._insetPlane=L.marker([d.lat,d.lng],{
@@ -8586,7 +8767,7 @@ function initRadar(){
   try{
     // Center on aircraft home airport if known
     var aptCoord=APTS[S.pfFrom]||{lat:25.8,lng:-80.3};
-    _wxMap=L.map('wx-map',{zoomControl:false,attributionControl:false,dragging:true,scrollWheelZoom:false}).setView([aptCoord.lat,aptCoord.lng],7);
+    var _mc3=document.getElementById('wx-map');if(_mc3&&_mc3._leaflet_id){_mc3._leaflet_id=null;while(_mc3.firstChild)_mc3.removeChild(_mc3.firstChild);}_wxMap=L.map('wx-map',{zoomControl:false,attributionControl:false,dragging:true,scrollWheelZoom:false}).setView([aptCoord.lat,aptCoord.lng],7);
     // Base map
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:12,opacity:0.6,attribution:''}).addTo(_wxMap);
     // Add radar layer from RainViewer (free, no key needed)
@@ -8685,9 +8866,22 @@ function openWindy(){
 // Init radar when dashboard renders (deferred to avoid blocking)
 function initDashWidgets(){
   setTimeout(function(){initRadar();},200);
-  setTimeout(function(){initDashSocialMap();},400);
+  setTimeout(function(){if(typeof initDashSocialMap==='function')initDashSocialMap();},400);
   setTimeout(function(){updateNearbyWeather();},1500);
 }
+
+function dashWidget_social(){
+  return'<div class="card">'
+    +'<div class="seclbl" style="margin-top:0">🌐 Pilot Network</div>'
+    +'<div style="text-align:center;padding:14px 0;color:var(--t3)">'
+      +'<div style="font-size:24px;margin-bottom:6px">🌐</div>'
+      +'<div style="font-size:12px;font-weight:600;color:var(--t2);margin-bottom:3px">Pilot Network</div>'
+      +'<div style="font-size:11px">Connect with nearby pilots</div>'
+      +'<button onclick="nav(\'social\')" style="margin-top:10px;padding:8px 16px;background:var(--teal);border:none;border-radius:8px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Open Network →</button>'
+    +'</div>'
+  +'</div>';
+}
+function initDashSocialMap(){} // handled by full social screen
 async function updateNearbyWeather(){
   var icaos=NEARBY.map(function(a){return a.icao;}).join(',');
   try{
@@ -8726,7 +8920,7 @@ function initMap(){
   var el=$('navmap');if(!el)return;
   try{
     var c=APTS[S.pfFrom]||{lat:25.8,lng:-80.3};
-    var m=L.map('navmap',{zoomControl:true,attributionControl:false}).setView([c.lat,c.lng],9);
+    var _mc4=document.getElementById('navmap');if(_mc4&&_mc4._leaflet_id){_mc4._leaflet_id=null;while(_mc4.firstChild)_mc4.removeChild(_mc4.firstChild);}var m=L.map('navmap',{zoomControl:true,attributionControl:false}).setView([c.lat,c.lng],9);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{maxZoom:18,attribution:''}).addTo(m);
     S.mapInst=m;
     Object.keys(APTS).forEach(function(k){
@@ -8847,20 +9041,31 @@ async function genRoute(){
 
     var res=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
-      headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      headers:getApiHeaders(),
       body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',
-        max_tokens:isIFR?1200:800,
+        model:'claude-sonnet-4-6',
+        max_tokens:isIFR?1500:1000,
         system:sysPrompt,
         messages:[{role:'user',content:prompt}]
       })
     });
     var data=await res.json();
-    var raw=(data.content&&data.content[0]&&data.content[0].text)||'{}';
+    // Check for API-level error
+    if(data.error) throw new Error('API error: '+data.error.message);
+    var raw=(data.content&&data.content[0]&&data.content[0].text)||'';
+    if(!raw) throw new Error('empty response');
     raw=raw.replace(/```json|```/g,'').trim();
     raw=raw.replace(/"terrainWarning"\s*:\s*"null"/g,'"terrainWarning":null');
-    S.aiRoute=JSON.parse(raw);
-    S.aiRoute.flightRules=isIFR?'ifr':'vfr';
+    // Find JSON object in response (model sometimes adds preamble)
+    var jsonMatch=raw.match(/\{[\s\S]*\}/);
+    if(!jsonMatch) throw new Error('no JSON in response');
+    var parsed=JSON.parse(jsonMatch[0]);
+    // Validate — must have at least a route or ete field
+    if(!parsed.route&&!parsed.ete&&!parsed.dist) throw new Error('incomplete route data');
+    parsed.flightRules=isIFR?'ifr':'vfr';
+    // Ensure route field exists
+    if(!parsed.route) parsed.route='DCT';
+    S.aiRoute=parsed;
     S.routeLoading=false;
     go('navscreen');
     setTimeout(initRouteMap,300);
@@ -10694,7 +10899,7 @@ async function sendMsg(){
   S.isTyping=true;go('ai');setTimeout(scrollChat,60);
   var tail=S.ac.tail||'the aircraft';
   try{
-    var res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:800,system:'You are an expert aviation AI inside Volanti. Aircraft: '+esc(tail)+' — '+esc(S.ac.make)+' '+esc(S.ac.model)+' ('+S.ac.engine+'), max gross '+S.ac.maxGross+' lbs, empty '+S.ac.emptyWt+' lbs. Current fuel: '+S.fuel+' '+S.ac.fuelUnit+'. Answer concisely. For regulations cite FAR/AIM and end with "Verify with FAA/official sources." Never authorize a flight.',messages:S.chatMsgs.slice(-20).map(function(m){return {role:m.role,content:m.content};})})});
+    var res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:getApiHeaders(),body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:800,system:'You are an expert aviation AI inside Volanti. Aircraft: '+esc(tail)+' — '+esc(S.ac.make)+' '+esc(S.ac.model)+' ('+S.ac.engine+'), max gross '+S.ac.maxGross+' lbs, empty '+S.ac.emptyWt+' lbs. Current fuel: '+S.fuel+' '+S.ac.fuelUnit+'. Answer concisely. For regulations cite FAR/AIM and end with "Verify with FAA/official sources." Never authorize a flight.',messages:S.chatMsgs.slice(-20).map(function(m){return {role:m.role,content:m.content};})})});
     var data=await res.json();
     if(!res.ok){
       var errMsg=data&&data.error&&data.error.message?data.error.message:'API error '+res.status;
@@ -11569,6 +11774,35 @@ function dashWidget_ownerExpenses(){
 // ═══ HOME AIRPORT WEATHER WIDGET ═════════════════════════════════
 var _hwCache={icao:'',metar:null,taf:null,ts:0};
 
+// Auto-check home airport weather every 15 min when on dashboard
+setInterval(function(){
+  if(S.screen==='dash' && S.ac.homeAirport){
+    var age = Date.now() - _hwCache.ts;
+    if(age > 900000 || _hwCache.icao !== S.ac.homeAirport){
+      _hwCache.ts = 0; // force refetch
+      // Silent background fetch — update banner without full re-render
+      _silentWeatherCheck(S.ac.homeAirport);
+    }
+  }
+}, 60000);
+
+async function _silentWeatherCheck(icao){
+  try{
+    var r=await fetch('https://aviationweather.gov/api/data/metar?ids='+icao+'&format=json&hours=1');
+    if(!r.ok) return;
+    var d=await r.json();
+    if(!d||!d[0]) return;
+    var prev = _hwCache.metar ? (_hwCache.metar.flightCategory||'VFR') : null;
+    _hwCache={icao:icao,metar:d[0],taf:_hwCache.taf,ts:Date.now()};
+    var cur = d[0].flightCategory||'VFR';
+    // Re-render dashboard if flight category changed
+    if(prev && prev !== cur && S.screen==='dash'){
+      var grid=document.getElementById('dash-widget-grid');
+      if(grid) renderDashGrid(grid);
+    }
+  }catch(e){}
+}
+
 function dashWidget_homeWeather(){
   var icao=(S.ac.homeAirport||'').trim().toUpperCase();
   var cid='hw-'+Date.now();
@@ -11613,727 +11847,93 @@ function dashWidget_homeWeather(){
 }
 
 async function _fetchHomeWeather(icao,cid){
+  var el=document.getElementById(cid);
+  if(el) el.innerHTML='<div style="display:flex;align-items:center;gap:8px;padding:12px 0;color:rgba(255,255,255,.4)"><div style="width:14px;height:14px;border:2px solid rgba(11,165,176,.4);border-top-color:#0BA5B0;border-radius:50%;animation:spin 1s linear infinite;flex-shrink:0"></div><div style="font-size:11px">Fetching '+icao+' weather...</div></div>';
+  function fetchTmo(url,ms){var c=new AbortController();var t=setTimeout(function(){c.abort();},ms||7000);return fetch(url,{signal:c.signal}).then(function(r){clearTimeout(t);return r;});}
   try{
-    var metarRes=await fetch('https://aviationweather.gov/api/data/metar?ids='+icao+'&format=json');
-    var metarData=await metarRes.json();
-    var metar=metarData&&metarData[0]?metarData[0]:null;
-
-    var tafText=null;
-    try{
-      var tafRes=await fetch('https://aviationweather.gov/api/data/taf?ids='+icao+'&format=json');
-      var tafData=await tafRes.json();
-      tafText=tafData&&tafData[0]?tafData[0].rawTAF||tafData[0].raw_text:null;
-    }catch(e){}
-
-    _hwCache={icao:icao,metar:metar,taf:tafText,ts:Date.now()};
-
-    var el=document.getElementById(cid);
-    if(el) el.innerHTML=_buildHWContent(metar,tafText,icao);
-  }catch(e){
-    var el=document.getElementById(cid);
-    if(el) el.innerHTML='<div style="font-size:9px;font-weight:800;color:rgba(11,165,176,.7);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">🌤 '+icao+' WEATHER</div>'
-      +'<div style="font-size:12px;color:rgba(255,255,255,.4);padding:12px 0">Could not fetch weather — check connection</div>'
-      +'<button onclick="_fetchHomeWeather(\''+icao+'\',\''+cid+'\')" style="padding:7px 14px;background:rgba(11,165,176,.2);border:1px solid rgba(11,165,176,.3);border-radius:8px;color:#5EEAD4;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Retry</button>';
-  }
+    var r1=await fetchTmo('https://aviationweather.gov/api/data/metar?ids='+icao+'&format=json&hours=2',7000);
+    if(r1.ok){var d1=await r1.json();var m1=d1&&d1[0]?d1[0]:null;
+      if(m1&&(m1.rawOb||m1.temp!=null)){var taf1=null;try{var rt=await fetchTmo('https://aviationweather.gov/api/data/taf?ids='+icao+'&format=json',5000);var dt=await rt.json();taf1=dt&&dt[0]?(dt[0].rawTAF||dt[0].raw_text):null;}catch(e){}
+        _hwCache={icao:icao,metar:m1,taf:taf1,ts:Date.now()};if(el)el.innerHTML=_buildHWContent(m1,taf1,icao);return;}}
+  }catch(e){}
+  var COORDS={KHWO:[25.9874,-80.2406],KMIA:[25.7959,-80.2870],KTPA:[27.9755,-82.5332],KMCO:[28.4294,-81.3090],KFLL:[26.0726,-80.1527],KOPF:[25.9070,-80.2783],SKMD:[6.2199,-75.5905],SKBO:[4.7016,-74.1469],SKCG:[10.4424,-75.5129],SKPE:[7.5066,-75.7416],SKRG:[6.1649,-75.4279],SKCL:[3.5432,-76.3816],SKBQ:[10.890,-74.781],MHTG:[14.061,-87.217],MMMX:[19.436,-99.072],MROC:[9.994,-84.209]};
+  var coord=COORDS[icao]||null;
+  if(coord){try{
+    var r2=await fetchTmo('https://wttr.in/'+coord[0]+','+coord[1]+'?format=j1',8000);
+    if(r2.ok){var d2=await r2.json();var cur=d2.current_condition&&d2.current_condition[0];
+      if(cur){var windKts=Math.round((parseFloat(cur.windspeedKmph)||0)/1.852);var tempC=parseFloat(cur.temp_C)||0;var dewC=Math.round(parseFloat(cur.DewPointC||(tempC-5)));var visMi=Math.round((parseFloat(cur.visibility)||16)/1.609);var desc=(cur.weatherDesc&&cur.weatherDesc[0]&&cur.weatherDesc[0].value)||'';var fr2=visMi<1?'IFR':visMi<3?'MVFR':'VFR';var pres=cur.pressure?Math.round(parseFloat(cur.pressure)*0.02953*100)/100:29.92;
+        var m2={rawOb:icao+' '+String(cur.winddirDegree||0).padStart(3,'0')+'@'+windKts+'KT '+visMi+'SM '+desc+' '+Math.round(tempC)+'/'+dewC,flightCategory:fr2,wdir:parseInt(cur.winddirDegree)||0,wspd:windKts,wgst:0,visib:visMi,temp:tempC,dewp:dewC,altim:pres,name:icao,clouds:[],_wttr:true};
+        _hwCache={icao:icao,metar:m2,taf:null,ts:Date.now()};if(el)el.innerHTML=_buildHWContent(m2,null,icao);return;}}
+  }catch(e){}}
+  if(getApiKey()){try{
+    var r3=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:getApiHeaders(),body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:300,tools:[{type:'web_search_20250305',name:'web_search'}],messages:[{role:'user',content:'Current METAR for '+icao+'. JSON only: {"raw":"","flightCategory":"VFR","wind":"","vis":"","temp":"","dew":"","altim":""}'}]})});
+    var d3=await r3.json();var t3='';(d3.content||[]).forEach(function(b){if(b.type==='text')t3+=b.text;});
+    var jm=t3.match(/\{[^\{\}]*\}/);
+    if(jm){var wx=JSON.parse(jm[0]);var m3={rawOb:wx.raw||icao,flightCategory:wx.flightCategory||'VFR',wdir:0,wspd:0,visib:parseFloat(wx.vis)||10,temp:parseFloat(wx.temp)||null,dewp:parseFloat(wx.dew)||null,altim:parseFloat(wx.altim)||29.92,name:icao,clouds:[]};_hwCache={icao:icao,metar:m3,taf:null,ts:Date.now()};if(el)el.innerHTML=_buildHWContent(m3,null,icao);return;}
+  }catch(e){}}
+  if(el)el.innerHTML='<div style="font-size:9px;font-weight:800;color:rgba(11,165,176,.6);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Home Weather</div><div style="display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:10px;text-align:center"><div style="font-size:24px">📡</div><div style="font-size:12px;font-weight:700;color:rgba(255,255,255,.6)">Weather unavailable</div><div style="font-size:10px;color:rgba(255,255,255,.3);line-height:1.5">No weather sources reachable.</div><button onclick="_hwCache.ts=0;_fetchHomeWeather(\''+icao+'\',\''+cid+'\')" style="padding:8px 20px;background:rgba(11,165,176,.2);border:1px solid rgba(11,165,176,.4);border-radius:8px;color:#5EEAD4;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Retry</button><a href="https://aviationweather.gov/metar/data/?ids='+icao+'&format=raw" target="_blank" style="font-size:10px;color:rgba(11,165,176,.5);text-decoration:none">Open aviationweather.gov</a></div>';
 }
 
 function _buildHWContent(metar,taf,icao){
-  if(!metar) return '<div style="font-size:9px;font-weight:800;color:rgba(11,165,176,.7);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">🌤 '+icao+' WEATHER</div><div style="font-size:12px;color:rgba(255,255,255,.4);padding:12px 0">No METAR available</div>';
-
-  // Flight rules color
+  if(!metar) return '<div style="color:rgba(255,255,255,.4);font-size:12px;padding:12px 0">No METAR data</div>';
   var frColors={VFR:'#22c55e',MVFR:'#3b82f6',IFR:'#ef4444',LIFR:'#a855f7'};
-  var fr=metar.flightCategory||metar.flight_category||'VFR';
-  var frColor=frColors[fr]||'#22c55e';
-
-  // Wind
-  var windDir=metar.wdir||metar.wind_dir_degrees||0;
-  var windSpd=metar.wspd||metar.wind_speed_kt||0;
-  var windGust=metar.wgst||metar.wind_gust_kt||0;
-  var windStr=windDir==='VRB'||windDir===0?'Variable':''+windDir+'°';
-  windStr+=' at '+windSpd+' kts'+(windGust?' G'+windGust:'');
-
-  // Visibility
-  var vis=metar.visib||metar.visibility_statute_mi||'10+';
-  var visStr=vis+' SM';
-
-  // Ceiling
-  var clouds=metar.clouds||metar.sky_condition||[];
-  var ceiling='CLR';
-  if(Array.isArray(clouds)){
-    var bkn=clouds.find(function(c){return (c.cover||c.sky_cover)==='BKN'||(c.cover||c.sky_cover)==='OVC';});
-    if(bkn) ceiling=(bkn.cover||bkn.sky_cover)+' '+(bkn.base||bkn.cloud_base_ft_agl)+"'";
-    else if(clouds.length) ceiling=(clouds[0].cover||clouds[0].sky_cover||'CLR');
-  }
-
-  // Temp / Dewpoint
-  var temp=metar.temp!=null?metar.temp:(metar.temp_c!=null?metar.temp_c:'—');
-  var dew=metar.dewp!=null?metar.dewp:(metar.dewpoint_c!=null?metar.dewpoint_c:'—');
-  var altim=metar.altim||metar.altim_in_hg||metar.slp||'—';
-  var altStr=typeof altim==='number'&&altim>100?Math.round(altim)+' hPa':typeof altim==='number'?altim.toFixed(2)+'"':'—';
-
-  // Airport name
-  var aptName=metar.name||metar.station_id||icao;
-  if(aptName===icao&&metar.site) aptName=metar.site;
-
-  // Raw METAR
-  var raw=metar.rawOb||metar.raw_text||metar.rawMETAR||'';
-
-  // Obs time
-  var obsTime=metar.obsTime||metar.observation_time||'';
-  var timeStr='';
-  if(obsTime){try{var d=new Date(obsTime);timeStr=d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false})+' Z';}catch(e){}}
-
-  var html='';
-  // Header
-  html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">'
-    +'<div>'
-      +'<div style="font-size:26px;font-weight:900;color:#fff;letter-spacing:-.5px;line-height:1">'+icao+'</div>'
-      +(aptName&&aptName!==icao?'<div style="font-size:9px;font-weight:600;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.4px;margin-top:2px">'+aptName+'</div>':'')
-    +'</div>'
+  var fr=metar.flightCategory||'VFR';var frColor=frColors[fr]||'#22c55e';
+  var windDir=metar.wdir||0;var windSpd=metar.wspd||0;var windGust=metar.wgst||0;
+  var windStr=(windDir===0||windDir==='VRB'?'Variable':''+windDir+'°')+' at '+windSpd+' kts'+(windGust?' G'+windGust:'');
+  var vis=(metar.visib||10)+' SM';
+  var clouds=metar.clouds||[];var ceiling='CLR';
+  if(Array.isArray(clouds)&&clouds.length){var bkn=clouds.find(function(c){return(c.cover||c.sky_cover)==='BKN'||(c.cover||c.sky_cover)==='OVC';});if(bkn)ceiling=(bkn.cover||bkn.sky_cover)+' '+(bkn.base||bkn.cloud_base_ft_agl)+"'";else if(clouds[0])ceiling=(clouds[0].cover||clouds[0].sky_cover||'CLR');}
+  var temp=metar.temp!=null?metar.temp:'—';var dew=metar.dewp!=null?metar.dewp:'—';
+  var altim=metar.altim||'—';var altStr=typeof altim==='number'&&altim>100?Math.round(altim)+' hPa':typeof altim==='number'?altim.toFixed(2)+'"':'—';
+  var aptName=metar.name||metar.site||icao;
+  var raw=metar.rawOb||'';
+  var timeStr='';try{var d=new Date(metar.obsTime||metar.observation_time||'');if(!isNaN(d))timeStr=d.toISOString().slice(11,16)+' Z';}catch(e){}
+  var src=metar._wttr?'<span style="font-size:8px;color:rgba(255,255,255,.2);margin-left:4px">via wttr.in</span>':'';
+  var html='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">'
+    +'<div><div style="font-size:26px;font-weight:900;color:#fff;letter-spacing:-.5px;line-height:1">'+icao+'</div>'
+    +(aptName&&aptName!==icao?'<div style="font-size:9px;font-weight:600;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.4px;margin-top:2px">'+esc(aptName)+'</div>':'')+'</div>'
     +'<div style="display:flex;gap:6px;align-items:center">'
-      +(timeStr?'<div style="font-size:9px;color:rgba(255,255,255,.3)">'+timeStr+'</div>':'')
-      +'<button onclick="_hwCache.ts=0;renderDashGrid(document.getElementById(\'dash-widget-grid\'))" style="background:rgba(255,255,255,.08);border:none;border-radius:50%;width:26px;height:26px;color:rgba(255,255,255,.5);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center">↻</button>'
-      +'<div style="background:'+frColor+'22;border:1.5px solid '+frColor+';border-radius:8px;padding:4px 10px;font-size:11px;font-weight:800;color:'+frColor+'">'+fr+'</div>'
-    +'</div>'
-  +'</div>';
-
-  // Stats row
-  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">';
-  [['WIND',windStr],['VIS',visStr],['ALT',altStr]].forEach(function(s){
-    html+='<div style="background:rgba(255,255,255,.06);border-radius:8px;padding:8px 8px;text-align:center">'
-      +'<div style="font-size:8px;font-weight:700;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">'+s[0]+'</div>'
-      +'<div style="font-size:12px;font-weight:800;color:#fff;line-height:1.3">'+s[1]+'</div>'
-    +'</div>';
-  });
+    +(timeStr?'<div style="font-size:9px;color:rgba(255,255,255,.3)">'+timeStr+'</div>':'')
+    +'<button onclick="_hwCache.ts=0;renderDashGrid(document.getElementById(\'dash-widget-grid\'))" style="background:rgba(255,255,255,.08);border:none;border-radius:50%;width:26px;height:26px;color:rgba(255,255,255,.5);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center">↻</button>'
+    +'<div style="background:'+frColor+'22;border:1.5px solid '+frColor+';border-radius:8px;padding:4px 10px;font-size:11px;font-weight:800;color:'+frColor+'">'+fr+'</div>'
+    +'</div></div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">';
+  [['WIND',windStr],['VIS',vis],['ALT',altStr]].forEach(function(s){html+='<div style="background:rgba(255,255,255,.06);border-radius:8px;padding:8px;text-align:center"><div style="font-size:8px;font-weight:700;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">'+s[0]+'</div><div style="font-size:11px;font-weight:800;color:#fff;line-height:1.3">'+s[1]+'</div></div>';});
   html+='</div>';
-
-  // Ceiling + Temp
-  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">';
-  [['CEILING',ceiling],['TEMP / DEW',temp+'° / '+dew+'°']].forEach(function(s){
-    html+='<div style="background:rgba(255,255,255,.06);border-radius:8px;padding:7px 8px;text-align:center">'
-      +'<div style="font-size:8px;font-weight:700;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">'+s[0]+'</div>'
-      +'<div style="font-size:12px;font-weight:800;color:#fff">'+s[1]+'</div>'
-    +'</div>';
-  });
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">';
+  [['CEILING',ceiling],['TEMP / DEW',temp+'° / '+dew+'°']].forEach(function(s){html+='<div style="background:rgba(255,255,255,.06);border-radius:8px;padding:7px 8px;text-align:center"><div style="font-size:8px;font-weight:700;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">'+s[0]+'</div><div style="font-size:11px;font-weight:800;color:#fff">'+s[1]+'</div></div>';});
   html+='</div>';
-
-  // Raw METAR
-  if(raw){
-    html+='<div style="background:rgba(255,255,255,.04);border-radius:8px;padding:8px 10px;margin-bottom:8px">'
-      +'<div style="font-size:8px;font-weight:700;color:rgba(11,165,176,.6);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">📋 RAW METAR</div>'
-      +'<div style="font-size:10px;color:rgba(255,255,255,.6);font-family:monospace;line-height:1.6;word-break:break-all">'+raw+'</div>'
-    +'</div>';
-  }
-
-  // TAF
-  if(taf){
-    html+='<div id="hw-taf" style="display:none;background:rgba(255,255,255,.04);border-radius:8px;padding:8px 10px;margin-bottom:8px">'
-      +'<div style="font-size:8px;font-weight:700;color:rgba(11,165,176,.6);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">📋 TAF</div>'
-      +'<div style="font-size:10px;color:rgba(255,255,255,.6);font-family:monospace;line-height:1.6;word-break:break-all">'+taf+'</div>'
-    +'</div>'
-    +'<button onclick="var t=document.getElementById(\'hw-taf\');t.style.display=t.style.display===\'none\'?\'block\':\'none\';this.textContent=t.style.display===\'none\'?\'☁ View TAF\':\'☁ Hide TAF\'" style="width:100%;padding:9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:rgba(255,255,255,.6);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">☁ View TAF</button>';
-  }
-
+  if(raw)html+='<div style="background:rgba(255,255,255,.04);border-radius:8px;padding:8px 10px;margin-bottom:8px"><div style="font-size:8px;font-weight:700;color:rgba(11,165,176,.6);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">RAW METAR '+src+'</div><div style="font-size:10px;color:rgba(255,255,255,.6);font-family:monospace;line-height:1.6;word-break:break-all">'+esc(raw)+'</div></div>';
+  if(taf)html+='<div id="hw-taf" style="display:none;background:rgba(255,255,255,.04);border-radius:8px;padding:8px 10px;margin-bottom:8px"><div style="font-size:8px;font-weight:700;color:rgba(11,165,176,.6);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">TAF</div><div style="font-size:10px;color:rgba(255,255,255,.6);font-family:monospace;line-height:1.6;word-break:break-all">'+esc(taf)+'</div></div>'
+    +'<button onclick="var t=document.getElementById(\'hw-taf\');t.style.display=t.style.display===\'none\'?\'block\':\'none\';this.textContent=t.style.display===\'none\'?\'View TAF\':\'Hide TAF\'" style="width:100%;padding:9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:rgba(255,255,255,.6);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">View TAF</button>';
   return html;
 }
 
-// ═══ FLIGHT HOURS CHART WIDGET ═══════════════════════════════════
-function dashWidget_flightHours(){
-  // State stored on S for persistence across re-renders
-  if(!S._fhView) S._fhView='month';       // 'year' | 'month' | 'week'
-  if(!S._fhOwner) S._fhOwner='all';       // 'all' | owner name | 'charter'
-
-  var view   = S._fhView;
-  var filter = S._fhOwner;
-  var now    = new Date();
-  var log    = S.logbook||[];
-
-  // ── Build owner filter options ─────────────────────────────────
-  var ownerSet = {};
-  log.forEach(function(f){ var n=(f.owner||'').trim(); if(n) ownerSet[n]=true; });
-  var ownerNames = Object.keys(ownerSet).sort();
-  var hasCharter = log.some(function(f){return f.flightType==='charter';});
-
-  // ── Aggregate data ─────────────────────────────────────────────
-  function matches(f){
-    if(filter==='all') return true;
-    if(filter==='charter') return f.flightType==='charter';
-    return (f.owner||'').trim()===filter;
-  }
-
-  var labels=[], datasets=[], totals=[], barColors=[];
-  var TEAL='rgba(11,165,176,0.85)', TEAL_L='rgba(11,165,176,0.3)';
-  var RED='rgba(220,38,38,0.8)', RED_L='rgba(220,38,38,0.25)';
-
-  if(view==='year'){
-    // Last 5 years
-    var yr = now.getFullYear();
-    for(var y=yr-4;y<=yr;y++){
-      labels.push(String(y));
-      var hrs=0;
-      log.forEach(function(f){
-        if(!matches(f))return;
-        var d=new Date(f.date); if(isNaN(d))return;
-        if(d.getFullYear()===y) hrs+=parseFloat(f.time)||0;
-      });
-      totals.push(Math.round(hrs*10)/10);
-      barColors.push(y===yr?TEAL:TEAL_L);
-    }
-  } else if(view==='month'){
-    // Last 12 months
-    var MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    for(var m=11;m>=0;m--){
-      var d2=new Date(now.getFullYear(),now.getMonth()-m,1);
-      labels.push(MONTHS[d2.getMonth()]+(d2.getFullYear()!==now.getFullYear()?"'"+(d2.getFullYear()%100):''));
-      var hrs2=0;
-      log.forEach(function(f){
-        if(!matches(f))return;
-        var fd=new Date(f.date); if(isNaN(fd))return;
-        if(fd.getFullYear()===d2.getFullYear()&&fd.getMonth()===d2.getMonth()) hrs2+=parseFloat(f.time)||0;
-      });
-      totals.push(Math.round(hrs2*10)/10);
-      barColors.push(m===0?TEAL:TEAL_L);
-    }
-  } else {
-    // Last 8 weeks
-    for(var w=7;w>=0;w--){
-      var wStart=new Date(now); wStart.setDate(now.getDate()-now.getDay()-w*7);
-      var wEnd=new Date(wStart); wEnd.setDate(wStart.getDate()+6);
-      var mo=wStart.getMonth()+1, dy=wStart.getDate();
-      labels.push(mo+'/'+dy);
-      var hrs3=0;
-      log.forEach(function(f){
-        if(!matches(f))return;
-        var fd=new Date(f.date); if(isNaN(fd))return;
-        if(fd>=wStart&&fd<=wEnd) hrs3+=parseFloat(f.time)||0;
-      });
-      totals.push(Math.round(hrs3*10)/10);
-      barColors.push(w===0?TEAL:TEAL_L);
-    }
-  }
-
-  var totalHrs = totals.reduce(function(s,v){return s+v;},0);
-  var maxHrs   = Math.max.apply(null, totals.concat([0.1]));
-  var avgHrs   = totals.filter(function(v){return v>0;});
-  avgHrs = avgHrs.length ? Math.round(avgHrs.reduce(function(a,b){return a+b;})/avgHrs.length*10)/10 : 0;
-
-  // ── Toggle button helper ───────────────────────────────────────
-  function tabBtn(label, viewKey, active){
-    return '<button onclick="S._fhView=\''+viewKey+'\';renderDashGrid(document.getElementById(\'dash-widget-grid\'))" '
-      +'style="flex:1;padding:5px 4px;border-radius:7px;border:none;cursor:pointer;font-size:10px;font-weight:700;font-family:inherit;'
-      +'background:'+(active?'var(--teal)':'transparent')+';color:'+(active?'#fff':'var(--t3)')+'">'+label+'</button>';
-  }
-
-  // ── Owner filter pills ─────────────────────────────────────────
-  var filterOptions = [{k:'all',l:'All'}];
-  ownerNames.forEach(function(n){filterOptions.push({k:n,l:n.split(' ')[0]});});
-  if(hasCharter) filterOptions.push({k:'charter',l:'Charter'});
-
-  var filterPills = filterOptions.map(function(o){
-    var sel=filter===o.k;
-    return '<button onclick="S._fhOwner=\''+o.k+'\';renderDashGrid(document.getElementById(\'dash-widget-grid\'))" '
-      +'style="padding:3px 10px;border-radius:20px;border:1px solid '+(sel?'var(--teal)':'var(--bd)')+';background:'+(sel?'rgba(11,165,176,.12)':'transparent')+';color:'+(sel?'var(--teal)':'var(--t3)')+';font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">'+o.l+'</button>';
-  }).join('');
-
-  // ── Chart ID ──────────────────────────────────────────────────
-  var cid='fh-chart-'+Date.now();
-
-  // ── Mini stat row ─────────────────────────────────────────────
-  var statRow='<div style="display:flex;gap:12px;margin-bottom:10px">'
-    +'<div><div style="font-size:18px;font-weight:900;color:var(--teal);line-height:1">'+totalHrs.toFixed(1)+'</div><div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.4px">Total</div></div>'
-    +'<div style="width:.5px;background:var(--bd)"></div>'
-    +'<div><div style="font-size:18px;font-weight:900;color:var(--t1);line-height:1">'+avgHrs+'</div><div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.4px">Avg / period</div></div>'
-    +'<div style="width:.5px;background:var(--bd)"></div>'
-    +'<div><div style="font-size:18px;font-weight:900;color:var(--t1);line-height:1">'+totals[totals.length-1].toFixed(1)+'</div><div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.4px">'+(view==='year'?'This yr':view==='month'?'This mo':'This wk')+'</div></div>'
-  +'</div>';
-
-  var html='<div class="card" style="display:flex;flex-direction:column">'
-    // Header
-    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
-      +'<div class="seclbl" style="margin:0">✈ Flight hours</div>'
-      +'<div style="display:flex;gap:2px;background:var(--bg);border:.5px solid var(--bd);border-radius:8px;padding:2px">'
-        +tabBtn('Week','week',view==='week')
-        +tabBtn('Month','month',view==='month')
-        +tabBtn('Year','year',view==='year')
-      +'</div>'
-    +'</div>'
-    // Owner filter
-    +(filterOptions.length>1
-      ?'<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">'+filterPills+'</div>'
-      :'')
-    // Stats
-    +statRow
-    // Chart
-    +'<div style="flex:1;min-height:120px;position:relative">'
-      +'<canvas id="'+cid+'" style="width:100%;height:100%"></canvas>'
-    +'</div>'
-  +'</div>';
-
-  // Init chart after render
-  setTimeout(function(){
-    var cv=document.getElementById(cid); if(!cv)return;
-    cv.width=cv.offsetWidth; cv.height=Math.max(120,cv.offsetHeight||140);
-    var isDark=document.getElementById('app')&&document.getElementById('app').classList.contains('dark-mode');
-    var gridCol=isDark?'rgba(255,255,255,.06)':'rgba(0,0,0,.06)';
-    var labelCol=isDark?'rgba(255,255,255,.4)':'rgba(0,0,0,.4)';
-    try{
-      mkChart(cid, cv.getContext('2d'), {
-        type:'bar',
-        data:{
-          labels:labels,
-          datasets:[{
-            data:totals,
-            backgroundColor:barColors,
-            borderRadius:4,
-            borderSkipped:false,
-          }]
-        },
-        options:{
-          responsive:true,
-          maintainAspectRatio:false,
-          plugins:{
-            legend:{display:false},
-            tooltip:{
-              callbacks:{
-                label:function(c){return ' '+c.raw.toFixed(1)+' hrs';}
-              }
-            }
-          },
-          scales:{
-            x:{
-              grid:{display:false},
-              ticks:{color:labelCol,font:{size:9},maxRotation:0}
-            },
-            y:{
-              beginAtZero:true,
-              grid:{color:gridCol,lineWidth:.5},
-              ticks:{
-                color:labelCol,font:{size:9},
-                callback:function(v){return v+'h';}
-              }
-            }
-          }
-        }
-      });
-    }catch(e){}
-  },80);
-
-  return html;
-}
-
-function dashWidget_kpi_bar(){
-  var now = new Date();
-  var thisYear = now.getFullYear(), thisMonth = now.getMonth();
-  var prevMonth = thisMonth===0?11:thisMonth-1;
-  var prevMonthYear = thisMonth===0?thisYear-1:thisYear;
-  var MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-
-  var totalHrs = S.totalHours||0;
-  var hobbsTotal = S.hobbsTotal>0?S.hobbsTotal:(S.tapPrev>0?Math.round((S.tapPrev+S.tapHrs)*10)/10:totalHrs);
-  var yearHrs=0,monthHrs=0,prevMonthHrs=0,lastYearHrs=0;
-  (S.logbook||[]).forEach(function(f){
-    var h=parseFloat(f.time||f.pic||0)||0; if(!f.date||!h)return;
-    var d=new Date(f.date); if(isNaN(d))return;
-    var y=d.getFullYear(),m=d.getMonth();
-    if(y===thisYear){yearHrs+=h; if(m===thisMonth)monthHrs+=h;}
-    if(y===thisYear-1)lastYearHrs+=h;
-    if(y===prevMonthYear&&m===prevMonth)prevMonthHrs+=h;
-  });
-  var dueCount=0,overdueCount=0;
-  (S.exps||[]).forEach(function(ex){
-    if(!ex.date)return;
-    var diff=Math.round((new Date(ex.date)-now)/86400000);
-    if(diff<0)overdueCount++; else if(diff<=30)dueCount++;
-  });
-  var oilInterval=S.oilInterval||50, oilRem=Math.max(0,oilInterval-(S.oilHrs||0));
-  var charterRev=0,charterMonth=0;
-  (S.reports||[]).forEach(function(r){
-    var a=parseFloat(r.totalUSD||r.totalCOP||r.total||0)||0; if(!a)return;
-    charterRev+=a;
-    if(r.date){var d=new Date(r.date);if(!isNaN(d)&&d.getFullYear()===thisYear&&d.getMonth()===thisMonth)charterMonth+=a;}
-  });
-
-  function delta(cur,prev){
-    if(!prev)return null;
-    var p=Math.round(Math.abs(cur-prev)/prev*100);
-    return{up:cur>=prev,txt:(cur>=prev?'↑':'↓')+p+'%',color:cur>=prev?'#22c55e':'#ef4444'};
-  }
-
-  // Each tile: label, value, sub, delta, valueColor, onclick
-  var tiles=[];
-
-  // Hobbs
-  tiles.push({label:'Hobbs',val:hobbsTotal.toFixed(1),sub:'engine hrs',d:null,vc:'var(--teal)',click:'showHobbsModal()'});
-
-  // Month hours
-  var md=delta(monthHrs,prevMonthHrs);
-  tiles.push({label:MONTHS[thisMonth],val:monthHrs>0?monthHrs.toFixed(1):'—',sub:'hrs',d:md,vc:monthHrs>0?'var(--teal)':null,click:"nav('logs')"});
-
-  // Year hours
-  var yd=delta(yearHrs,lastYearHrs);
-  tiles.push({label:thisYear+'',val:yearHrs>0?yearHrs.toFixed(1):'—',sub:'YTD',d:yd,vc:null,click:"nav('logs')"});
-
-  // Compliance
-  var compVal=overdueCount>0?String(overdueCount):dueCount>0?String(dueCount):'✓';
-  var compSub=overdueCount>0?'overdue':dueCount>0?'due soon':'current';
-  var compColor=overdueCount>0?'#ef4444':dueCount>0?'#f59e0b':'#22c55e';
-  tiles.push({label:'Comply',val:compVal,sub:compSub,d:null,vc:compColor,click:"nav('logs')"});
-
-  // Oil
-  var oilColor=oilRem<10?'#ef4444':oilRem<20?'#f59e0b':null;
-  tiles.push({label:'Oil',val:oilRem+'h',sub:'remain',d:null,vc:oilColor,click:'showOilModal()'});
-
-  // Charter (only if there's revenue)
-  if(charterRev>0){
-    tiles.push({label:'Charter',val:'$'+Math.round(charterMonth).toLocaleString(),sub:'this mo.',d:null,vc:'#22c55e',click:"nav('billing')"});
-  }
-
-  // Co-owner tiles (first 2 if set up)
-  var ownerMap={};
-  (S.logbook||[]).forEach(function(f){
-    var h=parseFloat(f.time||f.pic||0)||0;
-    var name=(f.pilot||'').trim()||S.pilot.name||'';
-    if(h&&name)ownerMap[name]=(ownerMap[name]||0)+h;
-  });
-  var owners=Object.keys(ownerMap).sort(function(a,b){return ownerMap[b]-ownerMap[a];});
-  if(owners.length>1){
-    owners.slice(0,2).forEach(function(name){
-      tiles.push({label:name.split(' ')[0],val:(ownerMap[name]||0).toFixed(1),sub:'total hrs',d:null,vc:null,click:"nav('logs')"});
-    });
-  }
-
-  // Build tile HTML
-  var tileHTML = tiles.map(function(t){
-    return '<div onclick="'+t.click+'" style="flex:1;min-width:0;padding:10px 6px 9px;cursor:pointer;display:flex;flex-direction:column;justify-content:space-between;border-right:.5px solid var(--bd)">'
-      +'<div style="font-size:8px;font-weight:800;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px">'+t.label+'</div>'
-      +'<div style="font-size:20px;font-weight:900;color:'+(t.vc||'var(--t1)')+';line-height:1;letter-spacing:-.5px">'+t.val+'</div>'
-      +'<div style="display:flex;align-items:baseline;gap:3px;margin-top:4px">'
-        +'<span style="font-size:9px;color:var(--t3)">'+t.sub+'</span>'
-        +(t.d?'<span style="font-size:9px;font-weight:800;color:'+t.d.color+'">'+t.d.txt+'</span>':'')
-      +'</div>'
-    +'</div>';
-  }).join('');
-
-  return '<div class="card" style="padding:0;overflow:hidden">'
-    +'<div style="display:flex;overflow-x:auto;scrollbar-width:none">'+tileHTML+'</div>'
-  +'</div>';
-}
-
-// ═══ FLIGHT KPI WIDGET ══════════════════════════════════════════
-function dashWidget_kpi(){
-  var now=new Date();
-  // Month boundaries
-  var thisMonthStart=new Date(now.getFullYear(),now.getMonth(),1);
-  var lastMonthStart=new Date(now.getFullYear(),now.getMonth()-1,1);
-  var lastMonthEnd=new Date(now.getFullYear(),now.getMonth(),0);
-  // Week boundaries (Mon-Sun)
-  var dayOfWeek=now.getDay();var daysFromMon=(dayOfWeek+6)%7;
-  var thisWeekStart=new Date(now);thisWeekStart.setDate(now.getDate()-daysFromMon);thisWeekStart.setHours(0,0,0,0);
-  var lastWeekStart=new Date(thisWeekStart);lastWeekStart.setDate(thisWeekStart.getDate()-7);
-  var lastWeekEnd=new Date(thisWeekStart);lastWeekEnd.setDate(thisWeekStart.getDate()-1);lastWeekEnd.setHours(23,59,59);
-
-  function hoursInRange(from,to){
-    return (S.logbook||[]).reduce(function(sum,entry){
-      if(!entry.date)return sum;
-      var d=new Date(entry.date);
-      if(d>=from&&d<=to){
-        return sum+(parseFloat(entry.duration||entry.totalTime||entry.hours||0)||0);
-      }
-      return sum;
-    },0);
-  }
-
-  function expensesInRange(from,to){
-    return (S.reports||[]).reduce(function(sum,r){
-      if(!r.date)return sum;
-      var d=new Date(r.date);
-      if(d>=from&&d<=to){
-        var amt=parseFloat((r.total||r.amount||'0').toString().replace(/[^0-9.]/g,''))||0;
-        return sum+amt;
-      }
-      return sum;
-    },0);
-  }
-
-  var hrsThisMonth=hoursInRange(thisMonthStart,now);
-  var hrsLastMonth=hoursInRange(lastMonthStart,lastMonthEnd);
-  var hrsThisWeek=hoursInRange(thisWeekStart,now);
-  var hrsLastWeek=hoursInRange(lastWeekStart,lastWeekEnd);
-  var expThisMonth=expensesInRange(thisMonthStart,now);
-  var expLastMonth=expensesInRange(lastMonthStart,lastMonthEnd);
-  var flightsThisMonth=(S.logbook||[]).filter(function(e){return e.date&&new Date(e.date)>=thisMonthStart;}).length;
-  var flightsLastMonth=(S.logbook||[]).filter(function(e){return e.date&&new Date(e.date)>=lastMonthStart&&new Date(e.date)<=lastMonthEnd;}).length;
-
-  function delta(curr,prev,unit,prefix){
-    if(!prev&&!curr)return{txt:'No data',color:'var(--t3)'};
-    if(!prev)return{txt:'New data',color:'var(--teal)'};
-    var d=curr-prev;var pct=Math.abs(Math.round(d/prev*100));
-    var up=d>=0;
-    return{
-      txt:(up?'↑':'↓')+' '+pct+'% vs last '+(unit||''),
-      color:up?'var(--teal)':'#ef4444',raw:d,pct:pct
-    };
-  }
-
-  function kpiCard(emoji,label,value,unit,deltaObj,subtitle){
-    return'<div style="background:var(--bg);border-radius:12px;padding:12px;flex:1;min-width:0">'
-      +'<div style="font-size:13px;margin-bottom:4px">'+emoji+'</div>'
-      +'<div style="font-size:20px;font-weight:900;color:var(--t1);line-height:1">'+value+'<span style="font-size:11px;font-weight:600;color:var(--t3);margin-left:2px">'+unit+'</span></div>'
-      +'<div style="font-size:10px;font-weight:700;color:var(--t3);margin-top:2px">'+label+'</div>'
-      +(deltaObj?'<div style="font-size:9px;font-weight:700;color:'+deltaObj.color+';margin-top:4px;line-height:1.3">'+deltaObj.txt+'</div>':'')
-      +(subtitle?'<div style="font-size:9px;color:var(--t3);margin-top:2px">'+subtitle+'</div>':'')
-    +'</div>';
-  }
-
-  var hasData=(S.logbook&&S.logbook.length>0)||(S.reports&&S.reports.length>0);
-
-  return'<div class="card">'
-    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
-      +'<div class="seclbl" style="margin:0">📈 Flight KPIs</div>'
-      +'<span style="font-size:10px;color:var(--t3)">'+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][now.getMonth()]+' '+now.getFullYear()+'</span>'
-    +'</div>'
-    +(!hasData
-      ?'<div style="text-align:center;padding:16px;color:var(--t3)">'
-        +'<div style="font-size:22px;margin-bottom:6px">📋</div>'
-        +'<div style="font-size:12px;font-weight:600;color:var(--t2);margin-bottom:4px">No flight data yet</div>'
-        +'<div style="font-size:11px;line-height:1.5">Log flights via the <b>🛬 Land</b> button or import your logbook in Maintenance → Logs.</div>'
-      +'</div>'
-      // Row 1: hours
-      :'<div style="display:flex;gap:8px;margin-bottom:8px">'
-        +kpiCard('✈','Hours this month',hrsThisMonth.toFixed(1),'hrs',delta(hrsThisMonth,hrsLastMonth,'month'),'')
-        +kpiCard('🗓','Hours this week',hrsThisWeek.toFixed(1),'hrs',delta(hrsThisWeek,hrsLastWeek,'week'),'')
-      +'</div>'
-      // Row 2: expenses + flights
-      +'<div style="display:flex;gap:8px;margin-bottom:8px">'
-        +kpiCard('💰','Expenses this month','$'+Math.round(expThisMonth).toLocaleString(),'',delta(expThisMonth,expLastMonth,'month'),'')
-        +kpiCard('🛫','Flights this month',flightsThisMonth,'flt',delta(flightsThisMonth,flightsLastMonth,'month'),'')
-      +'</div>'
-      // Cost per hour
-      +(hrsThisMonth>0
-        ?'<div style="background:var(--teal-l);border-radius:10px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center">'
-          +'<div style="font-size:11px;font-weight:700;color:var(--teal-d)">Cost per flight hour this month</div>'
-          +'<div style="font-size:16px;font-weight:900;color:var(--teal-d)">$'+Math.round(expThisMonth/hrsThisMonth).toLocaleString()+'/hr</div>'
-        +'</div>'
-        :'')
-    )
-    +'<button onclick="nav(\'logs\')" style="margin-top:10px;width:100%;padding:8px;background:transparent;border:.5px solid var(--bd);border-radius:8px;font-size:11px;font-weight:600;color:var(--t2);cursor:pointer;font-family:inherit">View flight logs →</button>'
-  +'</div>';
-}
-
-// ── SOCIAL MAP DASHBOARD WIDGET ──────────────────────────────────
-function dashWidget_social(){
-  if(!S.social)S.social={tab:'map',friends:[],clubs:[],chats:{},visible:true,myStatus:'flying',requests:[]};
-  if(!S.social.friends)S.social.friends=[];
-  var online=DEMO_PILOTS.filter(function(p){return p.online;});
-  var flying=DEMO_PILOTS.filter(function(p){return p.status==='flying';});
-  return'<div class="card" style="padding:0;overflow:hidden">'
-    // Mini map
-    +'<div id="dash-social-map" style="height:180px;width:100%;background:#e8f4f8;position:relative;border-radius:14px 14px 0 0">'
-      // Placeholder while map loads
-      +'<div id="dash-map-placeholder" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#cde8f0 0%,#b3d4e0 100%);border-radius:14px 14px 0 0">'
-        +'<div style="text-align:center"><div style="font-size:28px;margin-bottom:4px">🗺</div><div style="font-size:11px;color:#5a8a9a;font-weight:600">Loading pilot map...</div></div>'
-      +'</div>'
-    +'</div>'
-    // Stats bar
-    +'<div style="display:flex;gap:0;border-top:.5px solid var(--bd)">'
-      +'<div style="flex:1;padding:10px;text-align:center;border-right:.5px solid var(--bd)">'
-        +'<div style="font-size:18px;font-weight:800;color:var(--teal)">'+online.length+'</div>'
-        +'<div style="font-size:9px;font-weight:700;color:var(--t3);text-transform:uppercase">Online</div>'
-      +'</div>'
-      +'<div style="flex:1;padding:10px;text-align:center;border-right:.5px solid var(--bd)">'
-        +'<div style="font-size:18px;font-weight:800;color:#22C55E">'+flying.length+'</div>'
-        +'<div style="font-size:9px;font-weight:700;color:var(--t3);text-transform:uppercase">In flight</div>'
-      +'</div>'
-      +'<div style="flex:1;padding:10px;text-align:center;border-right:.5px solid var(--bd)">'
-        +'<div style="font-size:18px;font-weight:800;color:var(--t1)">'+S.social.friends.length+'</div>'
-        +'<div style="font-size:9px;font-weight:700;color:var(--t3);text-transform:uppercase">Friends</div>'
-      +'</div>'
-      +'<div style="flex:1;padding:10px;text-align:center">'
-        +'<button onclick="nav(\'social\')" style="background:var(--teal);border:none;border-radius:8px;padding:5px 8px;font-size:10px;font-weight:700;color:#fff;cursor:pointer;font-family:inherit">Open →</button>'
-      +'</div>'
-    +'</div>'
-    // Pilots row
-    +'<div style="padding:10px 12px 12px;display:flex;flex-direction:column;gap:6px">'
-      +online.slice(0,3).map(function(p){
-        return'<div onclick="nav(\'social\')" style="display:flex;align-items:center;gap:8px;cursor:pointer">'
-          +'<div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#0BA5B0,#0284C7);display:flex;align-items:center;justify-content:center;font-size:13px;position:relative;flex-shrink:0">'
-            +p.emoji
-            +'<div style="position:absolute;bottom:-1px;right:-1px;width:9px;height:9px;border-radius:50%;background:'+(p.status==='flying'?'#22C55E':'#60a5fa')+';border:1.5px solid var(--card)"></div>'
-          +'</div>'
-          +'<div style="flex:1;min-width:0">'
-            +'<div style="font-size:11px;font-weight:700;color:var(--t1)">'+esc(p.name.split(' ')[0])+' <span style="font-family:monospace;font-weight:600;font-size:10px;color:var(--t3)">'+esc(p.tail)+'</span></div>'
-            +'<div style="font-size:10px;color:var(--t3)">'+(p.status==='flying'?'✈ '+p.alt.toLocaleString()+'ft · '+p.gs+'kts':'🛬 On ground')+'</div>'
-          +'</div>'
-          +'<button onclick="event.stopPropagation();showPilotCard(\''+p.id+'\')" style="padding:4px 8px;background:var(--bg);border:.5px solid var(--bd);border-radius:7px;font-size:10px;font-weight:600;color:var(--t2);cursor:pointer;font-family:inherit;flex-shrink:0">Chat</button>'
-        +'</div>';
-      }).join('')
-    +'</div>'
-  +'</div>';
-}
-
-function initDashSocialMap(){
-  var el=document.getElementById('dash-social-map');
-  var ph=document.getElementById('dash-map-placeholder');
-  if(!el||!window.L)return;
-
-  // Get user position
-  function buildMini(lat,lng){
-    if(ph)ph.style.display='none';
-    try{
-      var map=L.map(el,{zoomControl:false,attributionControl:false,dragging:false,scrollWheelZoom:false,touchZoom:false,doubleClickZoom:false,boxZoom:false,keyboard:false}).setView([lat,lng],10);
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{maxZoom:18}).addTo(map);
-
-      // My marker
-      L.divIcon&&L.marker([lat,lng],{icon:L.divIcon({html:'<div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#0BA5B0,#0284C7);border:2.5px solid #fff;box-shadow:0 2px 8px rgba(11,165,176,.5);display:flex;align-items:center;justify-content:center;font-size:14px">'+(S.ac.photo?'<img src="'+S.ac.photo+'" style="width:100%;height:100%;border-radius:50%;object-fit:cover">':'✈')+'</div>',className:'',iconAnchor:[16,16]})}).addTo(map);
-
-      // Nearby pilot markers
-      DEMO_PILOTS.forEach(function(p){
-        if(!p.online)return;
-        var plat=lat+(p.lat-25.9),plng=lng+(p.lng-(-80.3));
-        var col=p.status==='flying'?'#22C55E':'#60a5fa';
-        var icon=L.divIcon({html:'<div style="width:26px;height:26px;border-radius:50%;background:#fff;border:2.5px solid '+col+';display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:0 1px 6px rgba(0,0,0,.2)">'+p.emoji+'</div>',className:'',iconAnchor:[13,13]});
-        L.marker([plat,plng],{icon:icon}).addTo(map).on('click',function(){showPilotCard(p.id);});
-      });
-
-      // Click map to open full social
-      el.addEventListener('click',function(){nav('social');},true);
-      // Overlay label
-      var lbl=document.createElement('div');
-      lbl.style.cssText='position:absolute;top:8px;left:8px;z-index:800;background:rgba(0,0,0,.5);color:#fff;font-size:10px;font-weight:700;padding:4px 8px;border-radius:20px;pointer-events:none;backdrop-filter:blur(4px)';
-      lbl.textContent='📡 Pilot Network — tap to explore';
-      el.appendChild(lbl);
-    }catch(e){}
-  }
-
-  if(navigator.geolocation){
-    navigator.geolocation.getCurrentPosition(
-      function(pos){buildMini(pos.coords.latitude,pos.coords.longitude);},
-      function(){buildMini(25.9,-80.3);},
-      {timeout:3000,maximumAge:300000}
-    );
-  } else {
-    buildMini(25.9,-80.3);
-  }
-}
-
-
-
-
-function showEmg(){
-  $('emgov').style.display='flex';
-  var source=S.extractedCL||CL;
-  var fromPOH=!!S.extractedCL;
-  var emgKeys=Object.keys(source).filter(function(k){return source[k].type==='emergency';});
-  var html='';
-  if(fromPOH&&emgKeys.length){
-    html+='<div style="background:rgba(22,101,52,.35);border-radius:8px;padding:7px 10px;margin-bottom:10px;font-size:10px;font-weight:700;color:#86EFAC">📗 FROM YOUR POH — '+(S.pohFilename?esc(S.pohFilename):'uploaded manual')+'</div>';
-  }
-  if(emgKeys.length){
-    emgKeys.forEach(function(k){
-      var sec=source[k];
-      html+='<div class="emgcat">'+esc(sec.t)+'</div>';
-      html+=sec.items.map(function(it,i){
-        var key=k+i,d=S.emgSt[key];
-        return '<div class="emgi" onclick="S.emgSt[\''+key+'\']=!S.emgSt[\''+key+'\'];this.querySelector(\'.emgcr\').classList.toggle(\'on\',S.emgSt[\''+key+'\']);this.querySelector(\'.etxt\').style.textDecoration=S.emgSt[\''+key+'\']?\'line-through\':\'\';this.querySelector(\'.etxt\').style.opacity=S.emgSt[\''+key+'\']?\'.4\':\'1\'">'
-          +'<div class="emgcr '+(d?'on':'')+'"><span style="color:#fff;font-size:10px;font-weight:800;display:'+(d?'block':'none')+'">✓</span></div>'
-          +'<div><div class="etxt" style="font-size:14px;font-weight:700;color:#fff;'+(d?'text-decoration:line-through;opacity:.4':'')+'">'+esc(it.l)+'</div><div style="font-size:11px;color:var(--teal);margin-top:1px">'+esc(it.s)+'</div></div>'
-        +'</div>';
-      }).join('');
-    });
-  } else {
-    html+='<div style="text-align:center;padding:32px;color:rgba(255,255,255,.4)">'
-      +'<div style="font-size:32px;margin-bottom:8px">📚</div>'
-      +'<div style="font-size:13px;line-height:1.5">Upload your POH to get<br>emergency procedures for <strong>'+(S.ac.tail||'your aircraft')+'</strong></div>'
-      +'<button onclick="hideEmg();uploadPOHFromLists()" style="background:var(--teal);color:#fff;border:none;border-radius:8px;padding:9px 18px;font-size:12px;font-weight:700;margin-top:14px;cursor:pointer;font-family:inherit">📄 Upload POH</button>'
-      +'</div>';
-  }
-  html+='<div style="padding:14px 0;font-size:10px;color:rgba(255,255,255,.2);text-align:center;line-height:1.5">Always verify with your official POH.<br>PIC is always responsible for all decisions.</div>';
-  $('emglist').innerHTML=html;
-}
-function hideEmg(){$('emgov').style.display='none';}
-
-// Initialize clock immediately on script load
+// ═══ STARTUP ═════════════════════════════════════════════════════
 (function(){
-  var lclEl=$('clk');
-  if(lclEl){var n=new Date();lclEl.textContent=n.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false});}
-  var utcEl=$('utcclk');
-  if(utcEl){var n2=new Date();utcEl.textContent='UTC '+n2.toUTCString().match(/(\d\d:\d\d)/)[1];}
-})();
-
-// Re-render on orientation change / resize (iPad rotation)
-var _resizeTimer;
-window.addEventListener('resize',function(){
-  clearTimeout(_resizeTimer);
-  _resizeTimer=setTimeout(function(){
-    // Re-render current screen to apply iPad layout
-    if(S.screen&&S.screen!=='login'&&S.screen!=='onboarding'){
-      var cur=S.screen;
-      go(cur);
-    }
-  },150);
-});
-
-// ═══ BOOT ════════════════════════════════════════════════════════
-// Inject PWA manifest dynamically
-(function injectManifest(){
-  try{
-    var svgIcon="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 110 110'%3E%3Crect width='110' height='110' rx='24' fill='%23060E18'/%3E%3Ccircle cx='55' cy='55' r='46' stroke='%230BA5B0' stroke-width='2' fill='none' opacity='0.5'/%3E%3Cline x1='55' y1='9' x2='55' y2='19' stroke='%230BA5B0' stroke-width='3' opacity='0.7'/%3E%3Cline x1='55' y1='91' x2='55' y2='101' stroke='%230BA5B0' stroke-width='3' opacity='0.7'/%3E%3Cline x1='9' y1='55' x2='19' y2='55' stroke='%230BA5B0' stroke-width='3' opacity='0.7'/%3E%3Cline x1='91' y1='55' x2='101' y2='55' stroke='%230BA5B0' stroke-width='3' opacity='0.7'/%3E%3Cpath d='M55 82 L22 28 L33 28 L55 68 L77 28 L88 28 Z' fill='%23DC2626'/%3E%3C/svg%3E";
-    var manifest={
-      name:'Volanti',
-      short_name:'Volanti',
-      description:'Aircraft management, simplified',
-      start_url:'./',
-      display:'standalone',
-      orientation:'portrait',
-      background_color:'#060E18',
-      theme_color:'#060E18',
-      icons:[
-        {src:svgIcon,sizes:'any',type:'image/svg+xml',purpose:'any maskable'},
-      ]
-    };
-    var blob=new Blob([JSON.stringify(manifest)],{type:'application/json'});
-    var url=URL.createObjectURL(blob);
-    var el=document.getElementById('pwa-manifest');
-    if(el)el.setAttribute('href',url);
-  }catch(e){}
-})();
-(function boot(){
-  try{
-    var restored=loadState();
-    // Ensure critical state fields exist after load
-    if(!S.social)S.social={tab:'map',friends:[],clubs:[],chats:{},visible:true,myStatus:'flying',requests:[]};
-    if(!S.social.friends)S.social.friends=[];
-    if(!S.settings)S.settings={theme:'light',dashOrder:['fuel','flighthours','homeweather','expenses','ownerexpenses','bookings','nearest','weather','quickplan'],dashHidden:[],textSize:'normal'};
-    if(!S.settings.dashOrder)S.settings.dashOrder=['fuel','flighthours','homeweather','expenses','ownerexpenses','bookings','nearest','weather','quickplan'];
-    if(!S.settings.dashHidden)S.settings.dashHidden=[];
-    if(!S.reports)S.reports=[];
-    if(!S.logbook)S.logbook=[];
-    if(!S.coOwners)S.coOwners=[];
-    if(!S.squawks)S.squawks=[];
-    if(!S.docs)S.docs=[];
-    // Apply saved theme immediately on boot
-    if(S.settings&&S.settings.theme) applyTheme(S.settings.theme);
-    if(S.settings&&S.settings.textSize) dashApplyTextSize();
-    if(restored&&S.ac.tail){
-      document.getElementById('nb').style.display='flex';
-      renderNavBar();
-      document.getElementById('micbtn').classList.remove('hid');
-      
-      if(!S.safetyAccepted){ go('dash'); showSafetyDisclaimer(function(){}); }
-      else{ go('dash'); }
+  var hasData = loadState();
+  applyTheme((S.settings&&S.settings.theme)||'light');
+  if(!hasData || !S.ac.tail){
+    // First time — show onboarding
+    S.obStep=1;
+    go('onboarding');
+  } else {
+    // Returning user — show dashboard
+    renderNavBar();
+    $('nb').style.display='flex';
+    try{$('micbtn').classList.remove('hid');}catch(e){}
+    if(!S.safetyAccepted){
+      nav('dash');
+      showSafetyDisclaimer(function(){});
     } else {
-      go('login');
+      nav('dash');
     }
-  }catch(e){
-    try{ go('login'); }catch(e2){}
-  }
-  setTimeout(runDailyChecks, 2000);
-  if(window.matchMedia){
-    window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',function(){
-      if(S.settings&&S.settings.theme==='system') applyTheme('system');
-    });
   }
 })();
+
+</script>
+</body>
+</html>
 </script>
 </body>
 </html>
