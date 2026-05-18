@@ -1,7 +1,33 @@
+# Volanti — Netlify configuration
+#
+# This routes /api/ai to the serverless function in netlify/functions/ai.js
+# and bumps the function timeout so AI calls with web_search can complete.
+
 [build]
   publish = "."
+  functions = "netlify/functions"
 
-[[headers]]
-  for = "/*"
-  [headers.values]
-    Cache-Control = "no-cache"
+# Route /api/ai → netlify/functions/ai.js
+[[redirects]]
+  from = "/api/ai"
+  to = "/.netlify/functions/ai"
+  status = 200
+  force = true
+
+# Background function variant (use this if your AI calls regularly exceed 10s,
+# e.g. POH lookup with web_search). Background functions get 15 minutes but
+# return immediately to the client — your client code would need to poll.
+# Most users do NOT need this. Leave commented unless you hit timeouts.
+#
+# [[redirects]]
+#   from = "/api/ai-bg"
+#   to = "/.netlify/functions/ai-background"
+#   status = 200
+
+# Function-level config — extend timeout to 26 seconds (Pro plan max).
+# On the free tier this is capped at 10s; for POH lookups consider Pro.
+[functions]
+  node_bundler = "esbuild"
+
+[functions."ai"]
+  timeout = 26
