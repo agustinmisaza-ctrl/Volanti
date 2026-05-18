@@ -4077,6 +4077,10 @@ function dashWidget_bookings(){
     return b&&b.startDate&&b.startDate>=todayISO;
   }).sort(function(a,b){return a.startDate<b.startDate?-1:1;}).slice(0,5);
 
+  // Opens the calendar's add-booking modal directly with today as default date.
+  // Matches the pattern used by other "+ Book aircraft" buttons in the app.
+  var openAdd="if(!S.cal)S.cal={bookings:[],requests:[]};S.cal.showAdd=true;S.cal.draft={startDate:'"+todayISO+"',endDate:'"+todayISO+"',title:'',type:'flight',notes:''};nav('calendar');";
+
   var body;
   if(upcoming.length===0){
     body='<div style="text-align:center;padding:18px 10px">'
@@ -4090,7 +4094,7 @@ function dashWidget_bookings(){
       var dayLabel=d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
       var type=String(b.type||'flight').toLowerCase();
       var icon=type==='maintenance'?'🔧':type==='inspection'?'🔍':type==='charter'?'💼':'✈';
-      return '<div onclick="nav(\'cal\')" style="padding:9px 0;'+(i>0?'border-top:.5px solid var(--bd);':'')+'display:flex;align-items:center;gap:10px;cursor:pointer">'
+      return '<div onclick="nav(\'calendar\')" style="padding:9px 0;'+(i>0?'border-top:.5px solid var(--bd);':'')+'display:flex;align-items:center;gap:10px;cursor:pointer">'
         +'<div style="font-size:18px;flex-shrink:0;width:24px;text-align:center">'+icon+'</div>'
         +'<div style="flex:1;min-width:0">'
           +'<div style="font-size:12px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(b.title||'Flight')+'</div>'
@@ -4104,7 +4108,7 @@ function dashWidget_bookings(){
   return '<div class="card">'
     +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">'
       +'<div style="display:flex;align-items:center;gap:6px"><span style="font-size:14px">📅</span><span style="font-size:11px;font-weight:800;color:var(--t3);text-transform:uppercase;letter-spacing:.5px">Upcoming bookings</span></div>'
-      +'<button onclick="event.stopPropagation();nav(\'cal\')" style="background:none;border:none;color:var(--teal);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;padding:4px 6px">+ Book</button>'
+      +'<button onclick="event.stopPropagation();'+openAdd+'" style="background:none;border:none;color:var(--teal);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;padding:4px 6px">+ Book</button>'
     +'</div>'
     +body
   +'</div>';
