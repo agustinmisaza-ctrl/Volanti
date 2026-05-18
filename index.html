@@ -136,7 +136,7 @@ body{
   letter-spacing:-.01em;
 }
 .device{width:390px;height:844px;background:var(--bg);border-radius:44px;overflow:hidden;position:relative;box-shadow:0 40px 80px rgba(0,0,0,.6),inset 0 0 0 2px rgba(255,255,255,.12);display:flex;flex-direction:column}
-.sb{background:var(--navy);padding:calc(14px + env(safe-area-inset-top)) 20px 8px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+.sb{background:var(--navy);padding:calc(14px + env(safe-area-inset-top)) 20px 8px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;--sb-fg:rgba(255,255,255,.85);--sb-divider:rgba(255,255,255,.2)}
 .sbt{color:#fff;font-size:14px;font-weight:600;letter-spacing:-.01em}
 .sbi{color:rgba(255,255,255,.6);font-size:11px}
 .scr{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
@@ -548,6 +548,8 @@ body.dash-editing .acbanner{outline:2px solid rgba(11,165,176,.4)}
     align-items:center;
     background:var(--bg);
     border-bottom:.5px solid var(--bd);
+    --sb-fg:var(--t1);
+    --sb-divider:var(--bd);
   }
   .sbt{font-size:15px;color:var(--t2)}
   .sbi{font-size:12px;color:var(--t3)}
@@ -805,8 +807,8 @@ body.dash-editing .acbanner{outline:2px solid rgba(11,165,176,.4)}
     <span class="sbt" id="clk">9:41</span>
     <div id="sb-center" style="display:flex;align-items:center;gap:8px">
       <span style="font-size:20px;font-weight:900;color:#0BA5B0;line-height:1">V</span>
-      <span style="width:1px;height:16px;background:rgba(255,255,255,.2)"></span>
-      <span style="color:rgba(255,255,255,.85);font-size:12px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;font-family:inherit">VOLANTI</span>
+      <span style="width:1px;height:16px;background:var(--sb-divider,rgba(255,255,255,.2))"></span>
+      <span style="color:var(--sb-fg,rgba(255,255,255,.85));font-size:12px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;font-family:inherit">VOLANTI</span>
     </div>
     <span class="sbi" id="utcclk">UTC --:--</span>
   </div>
