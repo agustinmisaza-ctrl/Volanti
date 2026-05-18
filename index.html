@@ -1103,12 +1103,87 @@ var NEARBY=[
   {icao:'KFLL',name:'Fort Lauderdale Hollywood',wx:'Mainly clear, vis 10SM',nm:'20.5',brg:'018°',cat:'VFR'}];
 
 var APTS={
+  // South Florida / GA hubs
   KFXE:{lat:26.197,lng:-80.171},KTPA:{lat:27.975,lng:-82.533},
   KMIA:{lat:25.793,lng:-80.290},KOPF:{lat:25.906,lng:-80.278},
-  SKMD:{lat:6.220,lng:-75.590},SKCG:{lat:10.442,lng:-75.512},
-  SKBQ:{lat:10.889,lng:-74.781},SKBO:{lat:4.702,lng:-74.147},
   KFLL:{lat:26.072,lng:-80.152},KTMB:{lat:25.648,lng:-80.433},
+  KHWO:{lat:25.987,lng:-80.241},KBCT:{lat:26.378,lng:-80.107},
+  KPBI:{lat:26.683,lng:-80.095},KSUA:{lat:27.182,lng:-80.221},
+  KAPF:{lat:26.152,lng:-81.775},KSRQ:{lat:27.395,lng:-82.554},
+  KRSW:{lat:26.536,lng:-81.755},KMCO:{lat:28.429,lng:-81.309},
+  KSFB:{lat:28.778,lng:-81.237},KLAL:{lat:27.989,lng:-82.018},
+  KORL:{lat:28.545,lng:-81.333},KISM:{lat:28.290,lng:-81.437},
+  KDAB:{lat:29.180,lng:-81.058},KGNV:{lat:29.690,lng:-82.272},
+  KJAX:{lat:30.494,lng:-81.688},KEYW:{lat:24.556,lng:-81.759},
+  KMTH:{lat:24.726,lng:-81.052},
+  // Major US
+  KBOS:{lat:42.365,lng:-71.009},KJFK:{lat:40.640,lng:-73.779},
+  KLGA:{lat:40.777,lng:-73.872},KEWR:{lat:40.692,lng:-74.169},
+  KATL:{lat:33.641,lng:-84.427},KORD:{lat:41.974,lng:-87.907},
+  KDFW:{lat:32.897,lng:-97.038},KIAH:{lat:29.984,lng:-95.341},
+  KLAX:{lat:33.943,lng:-118.408},KSFO:{lat:37.619,lng:-122.375},
+  KSAN:{lat:32.734,lng:-117.190},KOAK:{lat:37.713,lng:-122.220},
+  KSEA:{lat:47.450,lng:-122.309},KDEN:{lat:39.856,lng:-104.674},
+  KPHX:{lat:33.435,lng:-112.009},KLAS:{lat:36.080,lng:-115.152},
+  KDCA:{lat:38.851,lng:-77.038},KIAD:{lat:38.945,lng:-77.456},
+  KBWI:{lat:39.176,lng:-76.668},KMSP:{lat:44.882,lng:-93.222},
+  KDTW:{lat:42.213,lng:-83.353},KMDW:{lat:41.786,lng:-87.752},
+  // Colombia / Central / South America
+  SKBO:{lat:4.702,lng:-74.147},SKMD:{lat:6.220,lng:-75.590},
+  SKRG:{lat:6.165,lng:-75.429},SKCG:{lat:10.442,lng:-75.513},
+  SKBQ:{lat:10.889,lng:-74.781},SKCL:{lat:3.543,lng:-76.382},
+  SKPE:{lat:7.507,lng:-75.741},SKSM:{lat:11.119,lng:-74.228},
+  SKBG:{lat:7.127,lng:-73.185},SKAR:{lat:4.453,lng:-75.766},
+  MMMX:{lat:19.436,lng:-99.072},MMTO:{lat:19.336,lng:-99.566},
+  MROC:{lat:9.994,lng:-84.209},MHTG:{lat:14.061,lng:-87.217},
+  MPTO:{lat:9.071,lng:-79.384},MWCR:{lat:19.305,lng:-81.358},
+  TJSJ:{lat:18.439,lng:-66.002},TIST:{lat:18.337,lng:-64.973},
+  // Major intl
+  EGLL:{lat:51.477,lng:-0.461},EGKK:{lat:51.148,lng:-0.190},
+  LFPG:{lat:49.013,lng:2.550},LFPB:{lat:48.969,lng:2.441},
+  EDDF:{lat:50.033,lng:8.570},EHAM:{lat:52.310,lng:4.770},
+  LEMD:{lat:40.472,lng:-3.561},LIRF:{lat:41.800,lng:12.239},
+  SBGR:{lat:-23.435,lng:-46.473},SBGL:{lat:-22.808,lng:-43.243},
+  SAEZ:{lat:-34.822,lng:-58.535},SCEL:{lat:-33.393,lng:-70.785}
 };
+
+// ── Airport coordinate lookup with fallbacks ──────────────────────
+// Returns [lat, lng] for the given ICAO, or null if unknown.
+// Checked sources: APTS database → NAV_APTS table → null.
+function getAirportCoord(icao){
+  if(!icao) return null;
+  icao = String(icao).toUpperCase().trim();
+  if(APTS[icao] && APTS[icao].lat!=null) return [APTS[icao].lat, APTS[icao].lng];
+  // NAV_APTS is a different shape ({id,lat,lng}); search by id
+  if(typeof NAV_APTS!=='undefined'){
+    for(var i=0;i<NAV_APTS.length;i++){
+      if(NAV_APTS[i].id===icao && NAV_APTS[i].lat!=null) return [NAV_APTS[i].lat, NAV_APTS[i].lng];
+    }
+  }
+  return null;
+}
+
+// ── Great-circle distance via haversine formula, in nautical miles ─
+function greatCircleNm(lat1, lng1, lat2, lng2){
+  var R = 3440.065; // Earth radius in NM
+  var toRad = Math.PI / 180;
+  var dLat = (lat2 - lat1) * toRad;
+  var dLng = (lng2 - lng1) * toRad;
+  var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+          Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) *
+          Math.sin(dLng/2) * Math.sin(dLng/2);
+  var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
+// Computes the route distance for an A→B leg using haversine.
+// Returns null if either airport is unknown.
+function routeDistNm(fromIcao, toIcao){
+  var a = getAirportCoord(fromIcao);
+  var b = getAirportCoord(toIcao);
+  if(!a || !b) return null;
+  return greatCircleNm(a[0], a[1], b[0], b[1]);
+}
 
 // ═══ iOS WEB PUSH NOTIFICATIONS ══════════════════════════════════
 // Works as a PWA saved to Home Screen on iOS 16.4+
@@ -12188,14 +12263,32 @@ async function genRoute(){
     parsed.flightRules=isIFR?'ifr':'vfr';
     // Ensure route field exists
     if(!parsed.route) parsed.route='DCT';
+
+    // Cross-check AI distance against great-circle from real coordinates.
+    // If the AI returned something wildly wrong (off by >30%), recompute the
+    // whole route from coordinates + aircraft performance and override.
+    var realNm = routeDistNm(from, to);
+    if(realNm){
+      var aiNm = parseFloat(String(parsed.dist||'').replace(/[^0-9.]/g,''))||0;
+      if(!aiNm || Math.abs(aiNm-realNm)/realNm > 0.30){
+        console.warn('AI distance ('+aiNm+' nm) differs from great-circle ('+Math.round(realNm)+' nm) — recalculating');
+        parsed = recomputeRouteFromCoords(parsed, realNm, p, fuelUnit, S.cruiseFL>0?S.cruiseFL*100:p.cruiseAlt);
+      }
+    }
+
     S.aiRoute=parsed;
     S.routeLoading=false;
     go('navscreen');
     setTimeout(function(){initRouteMap();fetchFlightPlanWx();},300);
   }catch(e){
-    // Realistic fallback with proper phase breakdown — use user's selected altitude
+    console.warn('genRoute failed:', e && e.message || e);
+    // Compute distance from real coordinates when available — fall back to a
+    // typical short-leg distance only if the airport(s) are unknown.
     var fallbackAlt = S.cruiseFL>0 ? S.cruiseFL*100 : p.cruiseAlt;
-    var distNm=145;
+    var realNm = routeDistNm(from, to);
+    var distNm = realNm ? Math.round(realNm) : 145;
+    var aiUnavailable = true;
+
     var climbMin=Math.round((fallbackAlt/p.climbFPM));
     var climbDistNm=Math.round(climbMin/60*p.climbIAS);
     var descentMin=Math.round((fallbackAlt/p.descentFPM));
@@ -12220,10 +12313,46 @@ async function genRoute(){
       windsAloft:'Wind data unavailable — check ForeFlight or 1800wxbrief.com',
       weather:'No weather data. Check METAR/TAF before flight.',
       terrainWarning:null,
+      _aiFailed:true,
+      _aiError:(e&&e.message)||'AI service unreachable',
       flightRules:isIFR?'ifr':'vfr'
     };
+    // Show the user a real notice so they know the numbers are estimated, not AI-generated
+    try{ showToast('AI route unavailable — showing math-only estimate from coordinates','error',5000); }catch(_){}
   }
   S.routeLoading=false;go('navscreen');setTimeout(function(){initRouteMap();fetchFlightPlanWx();},300);
+}
+
+// ── Recompute the entire route plan from coords + aircraft performance ─
+// Used when the AI returns a wildly wrong distance. Keeps the AI's route
+// string, altitude, weather notes etc., but overrides everything that
+// depends on distance (times, fuels, ETE).
+function recomputeRouteFromCoords(parsed, distNm, p, fuelUnit, cruiseAlt){
+  var climbMin=Math.round(cruiseAlt/p.climbFPM);
+  var climbDistNm=Math.round(climbMin/60*p.climbIAS);
+  var descentMin=Math.round(cruiseAlt/p.descentFPM);
+  var descentDistNm=Math.round(descentMin/60*p.cruiseTAS);
+  var cruiseDistNm=Math.max(10, distNm-climbDistNm-descentDistNm);
+  var cruiseMin=Math.round(cruiseDistNm/p.cruiseTAS*60);
+  var totalMin=climbMin+cruiseMin+descentMin;
+  var fuelClimb=Math.round(p.climbFPH*(climbMin/60)*10)/10;
+  var fuelCruise=Math.round(p.cruiseFPH*(cruiseMin/60)*10)/10;
+  var fuelDescent=Math.round(p.descentFPH*(descentMin/60)*10)/10;
+  var fuelTotal=Math.round((fuelClimb+fuelCruise+fuelDescent)*10)/10;
+  var h=Math.floor(totalMin/60),m=totalMin%60;
+
+  // Keep the AI's route/altitude/winds/weather — only override the math
+  parsed.dist=Math.round(distNm)+' nm';
+  parsed.timeClimb=climbMin+'m';
+  parsed.timeCruise=(Math.floor(cruiseMin/60)>0?Math.floor(cruiseMin/60)+'h ':'')+(cruiseMin%60)+'m';
+  parsed.timeDescent=descentMin+'m';
+  parsed.ete=(h>0?h+'h ':'')+m+'m';
+  parsed.fuelClimb=fuelClimb+' '+fuelUnit;
+  parsed.fuelCruise=fuelCruise+' '+fuelUnit;
+  parsed.fuelDescent=fuelDescent+' '+fuelUnit;
+  parsed.fuelTotal=fuelTotal+' '+fuelUnit;
+  parsed._distRecalculated=true;
+  return parsed;
 }
 
 // ═══ LOGS / MAINTENANCE ══════════════════════════════════════════
