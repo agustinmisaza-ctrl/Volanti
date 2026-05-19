@@ -842,7 +842,112 @@ body.dash-editing .acbanner{outline:2px solid rgba(11,165,176,.4)}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
+// ═══ SUPABASE CLIENT ════════════════════════════════════════════════
+// The anon key is safe to embed in client-side code — actual data access
+// is gated by Row Level Security policies in the database (see schema.sql
+// run in Supabase SQL Editor). Anyone reading this page source sees the
+// key, which is fine; they only see their own rows because RLS is on.
+var SUPABASE_URL  = 'https://wdcdlomtwzbdhcgosdbw.supabase.co';
+var SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkY2Rsb210d3piZGhjZ29zZGJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxOTA5MTYsImV4cCI6MjA5NDc2NjkxNn0.C6LxznSpxVcxx9mIk8hJhsQhG8jsO1MXfmcq2zCKpv4';
+
+var SB = null;          // The Supabase client instance (built once on first use)
+var _authUser = null;   // Cached current user; null = not signed in
+var _authReady = false; // True after we've checked the initial session
+
+function getSupabase(){
+  if(SB) return SB;
+  if(typeof window.supabase==='undefined' || !window.supabase.createClient){
+    console.warn('Supabase library not loaded yet');
+    return null;
+  }
+  SB = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+    auth:{
+      persistSession:true,
+      autoRefreshToken:true,
+      detectSessionInUrl:true,    // Handles magic-link redirects automatically
+      storage: window.localStorage
+    }
+  });
+  return SB;
+}
+
+// Returns the cached user (synchronous). Use after _authReady is true.
+function currentUser(){ return _authUser; }
+function isSignedIn(){ return !!_authUser; }
+
+// Initial session check on page load. Sets _authUser and _authReady,
+// then fires a 'volanti:auth-ready' event the rest of the app listens for.
+// Retries up to ~5 seconds in case the Supabase CDN is slow to load.
+async function bootstrapAuth(retryCount){
+  retryCount = retryCount || 0;
+  // The Supabase UMD bundle exposes its API at window.supabase. If it isn't
+  // there yet, wait and try again — common on slow networks or when this
+  // function runs before the <script> tag finishes loading.
+  if(typeof window.supabase==='undefined' || !window.supabase.createClient){
+    if(retryCount < 25){  // 25 × 200ms = 5 second budget
+      return setTimeout(function(){bootstrapAuth(retryCount+1);}, 200);
+    }
+    console.warn('Supabase library failed to load after 5s — auth disabled');
+    _authReady=true;
+    document.dispatchEvent(new Event('volanti:auth-ready'));
+    return;
+  }
+  var sb = getSupabase();
+  if(!sb){ _authReady=true; document.dispatchEvent(new Event('volanti:auth-ready')); return; }
+  try{
+    var { data: { session } } = await sb.auth.getSession();
+    _authUser = session ? session.user : null;
+  }catch(e){
+    console.warn('bootstrapAuth error:', e);
+    _authUser = null;
+  }
+  _authReady = true;
+  document.dispatchEvent(new Event('volanti:auth-ready'));
+
+  // Subscribe to auth state changes (sign-in, sign-out, token refresh, magic-link arrival)
+  sb.auth.onAuthStateChange(function(event, session){
+    var prev = _authUser ? _authUser.id : null;
+    _authUser = session ? session.user : null;
+    var now = _authUser ? _authUser.id : null;
+    if(prev !== now){
+      // User identity changed — broadcast so screens re-render
+      document.dispatchEvent(new CustomEvent('volanti:auth-changed', {detail:{event:event, user:_authUser}}));
+    }
+  });
+}
+
+// Send a magic-link sign-in email. Returns {ok:true} or {ok:false,error}.
+async function signInWithMagicLink(email){
+  var sb = getSupabase();
+  if(!sb) return {ok:false, error:'Supabase not initialized'};
+  email = String(email||'').trim().toLowerCase();
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){
+    return {ok:false, error:'Please enter a valid email address'};
+  }
+  try{
+    var { error } = await sb.auth.signInWithOtp({
+      email: email,
+      options: { emailRedirectTo: window.location.origin }
+    });
+    if(error) return {ok:false, error:error.message||'Could not send sign-in email'};
+    return {ok:true};
+  }catch(e){
+    return {ok:false, error:(e&&e.message)||'Network error'};
+  }
+}
+
+async function signOut(){
+  var sb = getSupabase();
+  if(!sb) return;
+  try{ await sb.auth.signOut(); }catch(e){ console.warn('signOut:', e); }
+  _authUser = null;
+}
+
+// Start the bootstrap on next tick so the rest of the file has finished parsing
+setTimeout(bootstrapAuth, 0);
+
 // ═══ HELPERS ═════════════════════════════════════════════════════
 var $ = function(id){return document.getElementById(id);};
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
@@ -921,7 +1026,7 @@ var S = {
   myRole:'owner_admin',   // 'owner_admin'|'owner_viewer'|'crew'|'copilot'
   settings:{
     theme:'light',
-    dashOrder:['fuel','flighthours','homeweather','expenses','ownerexpenses','bookings','nearest','weather','quickplan'],
+    dashOrder:['ownerexpenses','bookings','expenses','flighthours','fuel','homeweather','weather'],
     dashHidden:[],
     dashLayout:{},   // {widgetId: {w:1|2, h:1|2}} — col span and height
     textSize:'normal',
@@ -1361,8 +1466,11 @@ function loadState(){
     if(d.pfTo)S.pfTo=d.pfTo;
     if(d.mktSaved)S.mktSaved=d.mktSaved;
     // ── Settings — always merge saved prefs but guarantee latest widgets in dashOrder
-    var LATEST_ORDER=['fuel','flighthours','homeweather','expenses','ownerexpenses','bookings','nearest','weather','quickplan'];
-    var REMOVED_WIDGETS=['stats','kpi','kpi_bar','kpi_hobbs','kpi_total','kpi_month','kpi_year','kpi_compliance','kpi_oil','kpi_charter','gdl60'];
+    // v1 dashboard reorder: co-ownership widgets first, then operational ones.
+    // quickplan + nearest are retired (they pointed at the now-hidden Flight Plan
+    // and Nearest screens). Weather radar widget is kept by user preference.
+    var LATEST_ORDER=['ownerexpenses','bookings','expenses','flighthours','fuel','homeweather','weather'];
+    var REMOVED_WIDGETS=['stats','kpi','kpi_bar','kpi_hobbs','kpi_total','kpi_month','kpi_year','kpi_compliance','kpi_oil','kpi_charter','gdl60','quickplan','nearest'];
     if(d.settings){
       S.settings=Object.assign(S.settings||{},d.settings);
       var ord=S.settings.dashOrder||[];
@@ -4626,7 +4734,7 @@ function applyTheme(theme){
 }
 
 function settingsH(){
-  if(!S.settings)S.settings={theme:'light',dashOrder:['fuel','flighthours','homeweather','expenses','ownerexpenses','bookings','nearest','weather','quickplan'],dashHidden:[],textSize:'normal'};
+  if(!S.settings)S.settings={theme:'light',dashOrder:['ownerexpenses','bookings','expenses','flighthours','fuel','homeweather','weather'],dashHidden:[],textSize:'normal'};
   var st=S.settings;
   var isDark=st.theme==='dark';
   // Ensure all known widgets are in the order (add missing ones at end)
@@ -4781,7 +4889,7 @@ function dashToggleWidget(id){
 }
 
 function dashResetLayout(){
-  S.settings.dashOrder=['fuel','flighthours','homeweather','expenses','ownerexpenses','bookings','nearest','weather','quickplan'];
+  S.settings.dashOrder=['ownerexpenses','bookings','expenses','flighthours','fuel','homeweather','weather'];
   S.settings.dashHidden=[];
   S.settings.dashLayout={};
   S.settings.textSize='normal';
@@ -4987,7 +5095,7 @@ function dashH(){
 // This ensures that if new widgets are added to DASH_WIDGETS (or the user has an
 // older saved order from a prior version), the missing widgets are auto-appended
 // so the user actually sees them. Persists the merged order so this is settled.
-var _DASH_DEFAULT_ORDER=['fuel','flighthours','homeweather','expenses','ownerexpenses','bookings','nearest','weather','quickplan'];
+var _DASH_DEFAULT_ORDER=['ownerexpenses','bookings','expenses','flighthours','fuel','homeweather','weather'];
 function getDashOrder(){
   if(!S.settings) S.settings={};
   // One-time migration: if older saved state has any defaults stuck in dashHidden,
@@ -5752,21 +5860,21 @@ var EFB_ICONS={
 var APP_SECTIONS=[
   {id:'dash',     label:'Dashboard',   emoji:'🏠', color:'#0B1D35', bg:'#E0F7FA',
     icon:'<svg viewBox="0 0 52 52" width="52" height="52"><rect width="52" height="52" rx="14" fill="#0B1D35"/><rect x="8" y="8" width="15" height="15" rx="4" fill="#0BA5B0"/><rect x="29" y="8" width="15" height="15" rx="4" fill="#0BA5B0" opacity=".7"/><rect x="8" y="29" width="15" height="15" rx="4" fill="#0BA5B0" opacity=".5"/><rect x="29" y="29" width="15" height="15" rx="4" fill="#0BA5B0" opacity=".3"/></svg>'},
-  {id:'billing',  label:'Financial',   emoji:'💰', color:'#166534', bg:'#DCFCE7',
+  {id:'billing',  label:'Expenses',    emoji:'💰', color:'#166534', bg:'#DCFCE7',
     icon:'<svg viewBox="0 0 52 52" width="52" height="52"><rect width="52" height="52" rx="14" fill="#166534"/><rect x="13" y="9" width="26" height="34" rx="4" fill="white" opacity=".92"/><line x1="18" y1="18" x2="34" y2="18" stroke="#166534" stroke-width="2.5" stroke-linecap="round"/><line x1="18" y1="24" x2="34" y2="24" stroke="#166534" stroke-width="2.5" stroke-linecap="round"/><line x1="18" y1="30" x2="27" y2="30" stroke="#166534" stroke-width="2.5" stroke-linecap="round"/><path d="M26 36 L26 43 L13 43 Z" fill="#166534" opacity=".4"/></svg>'},
-  {id:'perf',     label:'Performance', emoji:'📊', color:'#92400E', bg:'#FEF3C7',
+  {id:'perf',     label:'Performance', emoji:'📊', color:'#92400E', bg:'#FEF3C7', v1Hidden:true,
     icon:'<svg viewBox="0 0 52 52" width="52" height="52"><rect width="52" height="52" rx="14" fill="#D97706"/><path d="M10 38 A20 20 0 0 1 42 38" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="4" stroke-linecap="round"/><path d="M10 38 A20 20 0 0 1 30 18" fill="none" stroke="white" stroke-width="4" stroke-linecap="round"/><line x1="26" y1="38" x2="26" y2="22" stroke="white" stroke-width="2.5" stroke-linecap="round"/><circle cx="26" cy="38" r="4" fill="white"/></svg>'},
-  {id:'lists',    label:'Checklists',  emoji:'✅', color:'#4C1D95', bg:'#EDE9FE',
+  {id:'lists',    label:'Checklists',  emoji:'✅', color:'#4C1D95', bg:'#EDE9FE', v1Hidden:true,
     icon:'<svg viewBox="0 0 52 52" width="52" height="52"><rect width="52" height="52" rx="14" fill="#7C3AED"/><rect x="12" y="10" width="28" height="32" rx="4" fill="white" opacity=".92"/><circle cx="19" cy="20" r="3" fill="#7C3AED"/><line x1="25" y1="20" x2="35" y2="20" stroke="#7C3AED" stroke-width="2" stroke-linecap="round"/><circle cx="19" cy="28" r="3" fill="#7C3AED"/><line x1="25" y1="28" x2="35" y2="28" stroke="#7C3AED" stroke-width="2" stroke-linecap="round"/><path d="M16 36 L18 38 L23 33" stroke="#22c55e" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><line x1="25" y1="36" x2="35" y2="36" stroke="#7C3AED" stroke-width="2" stroke-linecap="round" opacity=".4"/></svg>'},
-  {id:'navscreen',label:'Flight Plan',  emoji:'📋', color:'#0C4A6E', bg:'#E0F2FE',
+  {id:'navscreen',label:'Flight Plan',  emoji:'📋', color:'#0C4A6E', bg:'#E0F2FE', v1Hidden:true,
     icon:'<svg viewBox="0 0 52 52" width="52" height="52"><rect width="52" height="52" rx="14" fill="#0284C7"/><circle cx="26" cy="24" r="13" fill="rgba(255,255,255,.15)"/><circle cx="26" cy="24" r="13" fill="none" stroke="rgba(255,255,255,.6)" stroke-width="1.5"/><path d="M26 11 L30 21 L26 24 L22 21 Z" fill="white" opacity=".9"/><path d="M39 24 L29 28 L26 24 L29 20 Z" fill="white" opacity=".5"/><path d="M26 37 L22 27 L26 24 L30 27 Z" fill="white" opacity=".3"/><path d="M13 24 L23 20 L26 24 L23 28 Z" fill="white" opacity=".5"/><circle cx="26" cy="24" r="3" fill="white"/></svg>'},
   {id:'logs',     label:'Maintenance', emoji:'🔧', color:'#7F1D1D', bg:'#FEE2E2',
     icon:'<svg viewBox="0 0 52 52" width="52" height="52"><rect width="52" height="52" rx="14" fill="#B91C1C"/><rect x="10" y="14" width="32" height="24" rx="5" fill="rgba(255,255,255,.15)"/><rect x="10" y="14" width="32" height="8" rx="5" fill="white" opacity=".85"/><line x1="16" y1="26" x2="36" y2="26" stroke="rgba(255,255,255,.6)" stroke-width="1.5" stroke-linecap="round"/><line x1="16" y1="30" x2="28" y2="30" stroke="rgba(255,255,255,.6)" stroke-width="1.5" stroke-linecap="round"/><path d="M36 30 L42 36 L40 38 L34 32 Z" fill="white" opacity=".9"/><circle cx="33" cy="29" r="4" fill="none" stroke="white" stroke-width="2" opacity=".9"/></svg>'},
   {id:'calendar', label:'Calendar',    emoji:'📅', color:'#831843', bg:'#FCE7F3',
     icon:'<svg viewBox="0 0 52 52" width="52" height="52"><rect width="52" height="52" rx="14" fill="#DB2777"/><rect x="9" y="13" width="34" height="28" rx="5" fill="rgba(255,255,255,.15)"/><rect x="9" y="13" width="34" height="10" rx="5" fill="white" opacity=".9"/><circle cx="18" cy="11" r="3" fill="white"/><circle cx="34" cy="11" r="3" fill="white"/><rect x="15" y="28" width="6" height="6" rx="2" fill="white" opacity=".8"/><rect x="23" y="28" width="6" height="6" rx="2" fill="white" opacity=".5"/><rect x="31" y="28" width="6" height="6" rx="2" fill="rgba(11,165,176,.9)"/></svg>'},
-  {id:'market',   label:'Marketplace', emoji:'🛒', color:'#78350F', bg:'#FEF3C7',
+  {id:'market',   label:'Marketplace', emoji:'🛒', color:'#78350F', bg:'#FEF3C7', v1Hidden:true,
     icon:'<svg viewBox="0 0 52 52" width="52" height="52"><rect width="52" height="52" rx="14" fill="#D97706"/><path d="M10 16 L14 16 L18 32 L36 32 L40 20 L16 20" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="20" cy="36" r="3" fill="white"/><circle cx="33" cy="36" r="3" fill="white"/><path d="M22 24 L26 28 L34 20" stroke="rgba(255,255,255,.8)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>'},
-  {id:'ai',       label:'AI Chat',     emoji:'✦', color:'#312E81', bg:'#EEF2FF',
+  {id:'ai',       label:'AI Chat',     emoji:'✦', color:'#312E81', bg:'#EEF2FF', v1Hidden:true,
     icon:'<svg viewBox="0 0 52 52" width="52" height="52"><rect width="52" height="52" rx="14" fill="#4F46E5"/><path d="M10 16 Q10 10 16 10 L36 10 Q42 10 42 16 L42 30 Q42 36 36 36 L28 36 L20 43 L20 36 L16 36 Q10 36 10 30 Z" fill="rgba(255,255,255,.92)"/><circle cx="18" cy="24" r="2.5" fill="#4F46E5"/><circle cx="26" cy="24" r="2.5" fill="#4F46E5"/><circle cx="34" cy="24" r="2.5" fill="#4F46E5"/></svg>'},
   {id:'settings', label:'Settings',    emoji:'⚙', color:'#1F2937', bg:'#F3F4F6',
     icon:'<svg viewBox="0 0 52 52" width="52" height="52"><rect width="52" height="52" rx="14" fill="#374151"/><circle cx="26" cy="26" r="7" fill="none" stroke="white" stroke-width="2.5"/><g stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="26" y1="10" x2="26" y2="14"/><line x1="26" y1="38" x2="26" y2="42"/><line x1="10" y1="26" x2="14" y2="26"/><line x1="38" y1="26" x2="42" y2="26"/><line x1="15" y1="15" x2="18" y2="18"/><line x1="34" y1="34" x2="37" y2="37"/><line x1="37" y1="15" x2="34" y2="18"/><line x1="18" y1="34" x2="15" y2="37"/></g></svg>'},
@@ -5774,8 +5882,17 @@ var APP_SECTIONS=[
     icon:'<svg viewBox="0 0 52 52" width="52" height="52"><rect width="52" height="52" rx="14" fill="#0D9488"/><circle cx="26" cy="20" r="9" fill="rgba(255,255,255,.9)"/><path d="M8 46 Q8 34 26 34 Q44 34 44 46" fill="rgba(255,255,255,.9)"/></svg>'},
   {id:'docs',     label:'Documents',   emoji:'📁', color:'#1E3A5F', bg:'#DBEAFE',
     icon:'<svg viewBox="0 0 52 52" width="52" height="52"><rect width="52" height="52" rx="14" fill="#2563EB"/><path d="M14 10 L30 10 L38 18 L38 42 L14 42 Z" fill="rgba(255,255,255,.92)" rx="3"/><path d="M30 10 L30 18 L38 18 Z" fill="rgba(37,99,235,.5)"/><line x1="19" y1="24" x2="33" y2="24" stroke="#2563EB" stroke-width="2" stroke-linecap="round"/><line x1="19" y1="29" x2="33" y2="29" stroke="#2563EB" stroke-width="2" stroke-linecap="round"/><line x1="19" y1="34" x2="26" y2="34" stroke="#2563EB" stroke-width="2" stroke-linecap="round"/></svg>'},
-  {id:'social',   label:'Pilot Network', emoji:'🌐', color:'#1e3a5f', bg:'#dbeafe',
+  {id:'social',   label:'Pilot Network', emoji:'🌐', color:'#1e3a5f', bg:'#dbeafe', v1Hidden:true,
     icon:'<svg viewBox="0 0 52 52" width="52" height="52"><rect width="52" height="52" rx="14" fill="#0284C7"/><circle cx="26" cy="26" r="13" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="1"/><circle cx="18" cy="20" r="5" fill="rgba(255,255,255,.9)"/><circle cx="34" cy="20" r="5" fill="rgba(255,255,255,.9)"/><circle cx="26" cy="34" r="5" fill="rgba(255,255,255,.9)"/><line x1="18" y1="20" x2="34" y2="20" stroke="rgba(255,255,255,.5)" stroke-width="1.5"/><line x1="18" y1="20" x2="26" y2="34" stroke="rgba(255,255,255,.5)" stroke-width="1.5"/><line x1="34" y1="20" x2="26" y2="34" stroke="rgba(255,255,255,.5)" stroke-width="1.5"/></svg>'}];
+
+// ── Visible sections for v1 (excludes v1Hidden) ──────────────────
+// Co-ownership focus means hiding non-essential features. To bring them
+// back in a future release, just delete `v1Hidden:true` from the section
+// above — the code for all of them is intact, only the navigation entry
+// is filtered out.
+function visibleSections(){
+  return APP_SECTIONS.filter(function(s){return !s.v1Hidden;});
+}
 
 // APP_SECTIONS init happens inside renderNavBar for safety
 
@@ -5835,7 +5952,7 @@ function updateSidebarHeader(){}
 
 function renderNavBar(){
   try{
-  if(!S.settings) S.settings={theme:'light',dashOrder:['fuel','flighthours','homeweather','expenses','ownerexpenses','bookings','nearest','weather','quickplan'],dashHidden:[],textSize:'normal'};
+  if(!S.settings) S.settings={theme:'light',dashOrder:['ownerexpenses','bookings','expenses','flighthours','fuel','homeweather','weather'],dashHidden:[],textSize:'normal'};
 
   var nb = $('nb');
   if(!nb) return;
@@ -5863,19 +5980,17 @@ function renderNavBar(){
     document.getElementById('app').classList.add('sb-collapsed');
   }
 
-  // Nav structure — sections with items
+  // Nav structure — co-ownership focus. v1-hidden sections are NOT listed
+  // here at all so they vanish cleanly from the desktop sidebar too.
+  // (Their code is intact in APP_SECTIONS for future resurrection.)
   var sections = [
     {
-      label: null, // no label for first group
-      items: ['dash','navscreen','ai']
+      label: null, // no label for the top group
+      items: ['dash']
     },
     {
-      label: 'Manage',
+      label: 'Co-ownership',
       items: ['billing','logs','calendar','docs']
-    },
-    {
-      label: 'Tools',
-      items: ['perf','lists','social','market']
     },
     {
       label: 'Account',
@@ -5913,8 +6028,12 @@ function renderNavBar(){
 
   if(isMobile){
     // Mobile: nb IS the bottom bar; sidebar slides in as overlay class
-    var pins = (S.settings&&S.settings.pinnedTabs)||['dash','navscreen','calendar'];
-    while(pins.length<3) pins.push(['dash','navscreen','calendar'].filter(function(p){return pins.indexOf(p)<0;})[0]||'dash');
+    var DEFAULT_PINS=['dash','billing','calendar'];   // Dashboard · Expenses · Calendar
+    var pins = (S.settings&&S.settings.pinnedTabs)||DEFAULT_PINS.slice();
+    // Migrate: drop any pin that references a v1-hidden section
+    pins = pins.filter(function(id){var s=APP_SECTIONS.find(function(x){return x.id===id;});return s && !s.v1Hidden;});
+    // Top off to 3 with defaults the user doesn't already have
+    while(pins.length<3) pins.push(DEFAULT_PINS.filter(function(p){return pins.indexOf(p)<0;})[0]||'dash');
     pins = pins.slice(0,3);
 
     // Bottom bar HTML
@@ -5962,7 +6081,7 @@ function showNavMenu(){
   sheet.style.cssText='background:'+(isDark?'#1a1a2e':'#fff')+';animation:nmSlideUp .28s cubic-bezier(.32,1,.23,1)';
 
   // Header
-  var pins=S.settings&&S.settings.pinnedTabs?S.settings.pinnedTabs.slice():['dash','navscreen','calendar'];
+  var pins=S.settings&&S.settings.pinnedTabs?S.settings.pinnedTabs.slice():['dash','billing','calendar'];
   sheet.innerHTML=''
     // Handle bar
     +'<div style="display:flex;justify-content:center;padding:10px 0 6px"><div style="width:36px;height:4px;border-radius:2px;background:rgba(128,128,128,.3)"></div></div>'
@@ -5971,10 +6090,10 @@ function showNavMenu(){
       +'<div style="font-size:17px;font-weight:800;color:'+(isDark?'#f1f5f9':'#0B1D35')+'">All sections</div>'
       +'<button onclick="closeNavMenu()" style="background:'+(isDark?'rgba(255,255,255,.1)':'#F3F4F6')+';border:none;border-radius:20px;padding:5px 14px;font-size:12px;font-weight:700;color:'+(isDark?'#fff':'#374151')+';cursor:pointer;font-family:inherit">Done</button>'
     +'</div>'
-    // Grid
+    // Grid — v1 only shows the co-ownership-focused sections
     +'<div style="padding:0 12px 16px;overflow-y:auto">'
       +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">'
-        +APP_SECTIONS.map(function(sec){
+        +visibleSections().map(function(sec){
           var isActive=sec.id===currentScreen;
           var isPinned=pins.indexOf(sec.id)>=0;
           var tileStyle='display:flex;flex-direction:column;align-items:center;gap:5px;padding:14px 6px;border-radius:16px;cursor:pointer;border:1.5px solid '+(isActive?'var(--teal)':isDark?'rgba(255,255,255,.06)':'#f0f0f0')+';position:relative;-webkit-tap-highlight-color:transparent;'+(isActive?'background:var(--teal-l);':'')+(isDark&&!isActive?'background:rgba(255,255,255,.05);':!isActive?'background:#f8fafc;':'');
@@ -5990,11 +6109,11 @@ function showNavMenu(){
       +'</div>'
       // Pin hint
       +'<div style="text-align:center;padding:12px 0 4px;font-size:11px;color:rgba(128,128,128,.6)">● Teal dot = pinned to the bottom bar</div>'
-      // Pin editor
+      // Pin editor — also filtered to visible sections only
       +'<div style="background:'+(isDark?'rgba(11,165,176,.08)':'var(--teal-l)')+';border:1px solid rgba(11,165,176,.2);border-radius:12px;padding:10px 12px;margin-top:6px">'
         +'<div style="font-size:11px;font-weight:700;color:var(--teal-d);margin-bottom:8px">Customize bottom bar (pick 3)</div>'
         +'<div style="display:flex;flex-wrap:wrap;gap:6px">'
-          +APP_SECTIONS.map(function(sec){
+          +visibleSections().map(function(sec){
             var pinned=pins.indexOf(sec.id)>=0;
             return'<button onclick="toggleNavPin(\''+sec.id+'\')" style="padding:5px 10px;border-radius:20px;border:1.5px solid '+(pinned?'var(--teal)':'rgba(11,165,176,.3)')+';background:'+(pinned?'var(--teal)':'transparent')+';color:'+(pinned?'#fff':'var(--teal-d)')+';font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px">'
               +sec.emoji+' '+sec.label.split(' ')[0]
