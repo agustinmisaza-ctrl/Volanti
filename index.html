@@ -842,7 +842,10 @@ body.dash-editing .acbanner{outline:2px solid rgba(11,165,176,.4)}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<!-- Supabase UMD bundle. Try jsdelivr first; if unavailable, fall back to unpkg.
+     The UMD build attaches to window.supabase so client code can use it. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"
+        onerror="(function(){var s=document.createElement('script');s.src='https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js';s.onerror=function(){console.warn('Both Supabase CDNs failed — auth/sync will be disabled');};document.head.appendChild(s);})()"></script>
 <script>
 // ═══ SUPABASE CLIENT ════════════════════════════════════════════════
 // The anon key is safe to embed in client-side code — actual data access
@@ -886,10 +889,10 @@ async function bootstrapAuth(retryCount){
   // there yet, wait and try again — common on slow networks or when this
   // function runs before the <script> tag finishes loading.
   if(typeof window.supabase==='undefined' || !window.supabase.createClient){
-    if(retryCount < 25){  // 25 × 200ms = 5 second budget
+    if(retryCount < 50){  // 50 × 200ms = 10 second budget (gives CDN fallback time to load)
       return setTimeout(function(){bootstrapAuth(retryCount+1);}, 200);
     }
-    console.warn('Supabase library failed to load after 5s — auth disabled');
+    console.warn('Supabase library failed to load after 10s — auth disabled');
     _authReady=true;
     document.dispatchEvent(new Event('volanti:auth-ready'));
     return;
