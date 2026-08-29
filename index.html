@@ -923,10 +923,26 @@ async function bootstrapAuth(retryCount){
   });
 }
 
-// Send a magic-link sign-in email. Returns {ok:true} or {ok:false,error}.
-async function signInWithMagicLink(email){
+// ── Sign-in helpers: Google OAuth + 6-digit email code ──
+async function signInWithGoogle(){
   var sb = getSupabase();
-  if(!sb) return {ok:false, error:'Supabase not initialized'};
+  if(!sb) return {ok:false, error:'Auth not ready — check your connection'};
+  try{
+    var { error } = await sb.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin }
+    });
+    if(error) return {ok:false, error:error.message||'Google sign-in failed'};
+    return {ok:true}; // browser will redirect to Google
+  }catch(e){
+    return {ok:false, error:(e&&e.message)||'Network error'};
+  }
+}
+
+// Email a 6-digit one-time code. Returns {ok:true} or {ok:false,error}.
+async function signInSendCode(email){
+  var sb = getSupabase();
+  if(!sb) return {ok:false, error:'Auth not ready — check your connection'};
   email = String(email||'').trim().toLowerCase();
   if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){
     return {ok:false, error:'Please enter a valid email address'};
@@ -934,9 +950,26 @@ async function signInWithMagicLink(email){
   try{
     var { error } = await sb.auth.signInWithOtp({
       email: email,
-      options: { emailRedirectTo: window.location.origin }
+      options: { shouldCreateUser: true }
     });
-    if(error) return {ok:false, error:error.message||'Could not send sign-in email'};
+    if(error) return {ok:false, error:error.message||'Could not send code'};
+    return {ok:true};
+  }catch(e){
+    return {ok:false, error:(e&&e.message)||'Network error'};
+  }
+}
+
+// Verify the 6-digit code. On success Supabase fires auth-changed → dashboard.
+async function signInVerifyCode(email, code){
+  var sb = getSupabase();
+  if(!sb) return {ok:false, error:'Auth not ready'};
+  try{
+    var { error } = await sb.auth.verifyOtp({
+      email: String(email||'').trim().toLowerCase(),
+      token: String(code||'').trim(),
+      type: 'email'
+    });
+    if(error) return {ok:false, error:error.message||'Invalid or expired code'};
     return {ok:true};
   }catch(e){
     return {ok:false, error:(e&&e.message)||'Network error'};
@@ -1635,6 +1668,7 @@ function go(s){
   S.screen=s;
   if(s!=='lists') S.editMode=false;
   if(s!=='dash'&&_wxMap){try{_wxMap.remove();}catch(e){}  _wxMap=null;_wxLayer=null;}
+  if(s!=='logs'&&typeof _fmMap!=='undefined'&&_fmMap){try{_fmMap.remove();}catch(e){} _fmMap=null;}
   if(s!=='navscreen') navStopAll();
   saveState();
   var scr=$('scr'),nb=$('nb'),mic=$('micbtn');
@@ -1819,55 +1853,78 @@ function loginH(){
 // they click the link, they land back on the app with a fresh session
 // (handled by detectSessionInUrl in the Supabase client config).
 function signinH(){
-  // Three sub-states: form, sending, sent
+  // Sub-states: form, sending, code (enter 6-digit), verifying
   var state = window._signinState || 'form';
   var lastEmail = window._signinEmail || '';
   var lastError = window._signinError || '';
 
-  // Use a real centered layout, no app chrome, dark-navy aviation feel
   var wrap = '<div style="min-height:100vh;min-height:100dvh;background:linear-gradient(180deg,#0B1D35 0%,#060E18 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;color:#fff">';
 
-  // Logo / brand mark
   var brand = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:32px">'
     +'<span style="font-size:36px;font-weight:900;color:#0BA5B0;line-height:1">V</span>'
     +'<span style="width:1px;height:28px;background:rgba(255,255,255,.2)"></span>'
     +'<span style="font-size:18px;font-weight:600;letter-spacing:.25em;color:rgba(255,255,255,.9);text-transform:uppercase">Volanti</span>'
   +'</div>';
 
+  var errBlock = lastError ? '<div style="background:rgba(239,68,68,.12);border:.5px solid rgba(239,68,68,.4);color:#fca5a5;font-size:12px;padding:8px 10px;border-radius:8px;margin-bottom:12px">'+esc(lastError)+'</div>' : '';
+  var inputStyle = 'width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:12px 14px;font-size:15px;color:#fff;font-family:inherit;margin-bottom:14px;box-sizing:border-box;outline:none';
   var card;
-  if(state === 'sent'){
+
+  if(state === 'code' || state === 'verifying'){
+    var verifying = state === 'verifying';
     card = '<div style="background:rgba(255,255,255,.04);border:.5px solid rgba(255,255,255,.08);border-radius:18px;padding:32px 24px;max-width:380px;width:100%;text-align:center">'
-      +'<div style="font-size:48px;margin-bottom:12px">✉️</div>'
-      +'<h1 style="font-size:20px;font-weight:700;margin:0 0 8px 0;color:#fff">Check your email</h1>'
-      +'<p style="font-size:13px;color:rgba(255,255,255,.65);line-height:1.5;margin:0 0 4px 0">We sent a sign-in link to</p>'
-      +'<p style="font-size:14px;color:#5EEAD4;font-weight:600;margin:0 0 18px 0;word-break:break-all">'+esc(lastEmail)+'</p>'
-      +'<p style="font-size:12px;color:rgba(255,255,255,.5);line-height:1.5;margin:0 0 18px 0">Tap the link in the email to finish signing in. The link expires in 1 hour.</p>'
-      +'<button onclick="signinReset()" style="background:none;border:none;color:#5EEAD4;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;padding:8px 0">Use a different email</button>'
+      +'<div style="font-size:44px;margin-bottom:10px">🔐</div>'
+      +'<h1 style="font-size:20px;font-weight:700;margin:0 0 8px 0;color:#fff">Enter your code</h1>'
+      +'<p style="font-size:13px;color:rgba(255,255,255,.65);line-height:1.5;margin:0 0 2px 0">We emailed a 6-digit code to</p>'
+      +'<p style="font-size:14px;color:#5EEAD4;font-weight:600;margin:0 0 16px 0;word-break:break-all">'+esc(lastEmail)+'</p>'
+      +errBlock
+      +'<form onsubmit="event.preventDefault();signinVerify();return false;">'
+        +'<input id="signin-code" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" '
+          +(verifying?'disabled ':'')
+          +'placeholder="••••••" '
+          +'style="'+inputStyle+';text-align:center;font-size:26px;letter-spacing:.35em;font-weight:700" '
+          +'oninput="if(this.value.length===6)signinVerify()">'
+        +'<button type="submit" '+(verifying?'disabled':'')+' style="width:100%;padding:12px;background:'+(verifying?'rgba(11,165,176,.4)':'linear-gradient(135deg,#0BA5B0,#077A84)')+';border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:'+(verifying?'wait':'pointer')+';font-family:inherit">'
+          +(verifying?'Verifying…':'Verify & sign in')
+        +'</button>'
+      +'</form>'
+      +'<div style="display:flex;justify-content:center;gap:18px;margin-top:16px">'
+        +'<button onclick="signinResend()" style="background:none;border:none;color:#5EEAD4;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;padding:4px 0">Resend code</button>'
+        +'<button onclick="signinReset()" style="background:none;border:none;color:rgba(255,255,255,.55);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;padding:4px 0">Different email</button>'
+      +'</div>'
     +'</div>';
   } else {
     var sending = state === 'sending';
-    var errBlock = lastError ? '<div style="background:rgba(239,68,68,.12);border:.5px solid rgba(239,68,68,.4);color:#fca5a5;font-size:12px;padding:8px 10px;border-radius:8px;margin-bottom:12px">'+esc(lastError)+'</div>' : '';
+    var gBtn = '<button onclick="signinGoogle()" '+(sending?'disabled ':'')
+      +'style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:12px;background:#fff;border:none;border-radius:10px;color:#1f2937;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:18px">'
+      +'<svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.2 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.2 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C41 35.4 44 30.2 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>'
+      +'Continue with Google</button>';
     card = '<div style="background:rgba(255,255,255,.04);border:.5px solid rgba(255,255,255,.08);border-radius:18px;padding:32px 24px;max-width:380px;width:100%">'
       +'<h1 style="font-size:22px;font-weight:700;margin:0 0 6px 0;color:#fff;text-align:center">Welcome aboard</h1>'
-      +'<p style="font-size:13px;color:rgba(255,255,255,.6);line-height:1.5;margin:0 0 24px 0;text-align:center">Sign in to manage your aircraft, track expenses, and collaborate with co-owners.</p>'
+      +'<p style="font-size:13px;color:rgba(255,255,255,.6);line-height:1.5;margin:0 0 22px 0;text-align:center">Sign in to manage your aircraft, track expenses, and collaborate with co-owners.</p>'
       +errBlock
+      +gBtn
+      +'<div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">'
+        +'<span style="flex:1;height:1px;background:rgba(255,255,255,.12)"></span>'
+        +'<span style="font-size:11px;color:rgba(255,255,255,.45);font-weight:600">OR</span>'
+        +'<span style="flex:1;height:1px;background:rgba(255,255,255,.12)"></span>'
+      +'</div>'
       +'<form onsubmit="event.preventDefault();signinSubmit();return false;">'
         +'<label style="display:block;font-size:11px;font-weight:700;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Email address</label>'
         +'<input id="signin-email" type="email" inputmode="email" autocomplete="email" autocapitalize="off" autocorrect="off" spellcheck="false" '
           +'placeholder="you@example.com" value="'+esc(lastEmail)+'" '
           +(sending?'disabled ':'')
-          +'style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:12px 14px;font-size:15px;color:#fff;font-family:inherit;margin-bottom:14px;box-sizing:border-box;outline:none" '
+          +'style="'+inputStyle+'" '
           +'onfocus="this.style.borderColor=\'rgba(11,165,176,.6)\'" '
           +'onblur="this.style.borderColor=\'rgba(255,255,255,.12)\'">'
         +'<button type="submit" '+(sending?'disabled':'')+' style="width:100%;padding:12px;background:'+(sending?'rgba(11,165,176,.4)':'linear-gradient(135deg,#0BA5B0,#077A84)')+';border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:'+(sending?'wait':'pointer')+';font-family:inherit;letter-spacing:.2px">'
-          +(sending?'Sending…':'Send sign-in link →')
+          +(sending?'Sending code…':'Email me a code →')
         +'</button>'
       +'</form>'
-      +'<p style="font-size:11px;color:rgba(255,255,255,.4);line-height:1.5;margin:18px 0 0 0;text-align:center">No password needed. We\'ll email you a one-tap sign-in link.</p>'
+      +'<p style="font-size:11px;color:rgba(255,255,255,.4);line-height:1.5;margin:18px 0 0 0;text-align:center">No password needed. We\'ll email you a 6-digit code.</p>'
     +'</div>';
   }
 
-  // Footer / fine print
   var foot = '<div style="margin-top:24px;font-size:11px;color:rgba(255,255,255,.4);text-align:center;max-width:380px">'
     +'By signing in you agree that Volanti is a co-ownership management tool and is <b>not for navigation</b>. Always cross-check with authoritative flight planning tools before flight.'
   +'</div>';
@@ -1875,7 +1932,18 @@ function signinH(){
   return wrap + brand + card + foot + '</div>';
 }
 
-// Submit the sign-in form: send a magic link via Supabase auth.
+// Google OAuth entry point
+async function signinGoogle(){
+  window._signinError='';
+  var result = await signInWithGoogle();
+  if(!result.ok){
+    window._signinError = result.error || 'Google sign-in failed';
+    go('signin');
+  }
+  // On success the browser redirects to Google, then back — nothing to do here.
+}
+
+// Send the 6-digit code
 async function signinSubmit(){
   var emailEl = $('signin-email');
   if(!emailEl) return;
@@ -1885,22 +1953,54 @@ async function signinSubmit(){
   window._signinError = '';
   window._signinState = 'sending';
   go('signin');
-  var result = await signInWithMagicLink(email);
+  var result = await signInSendCode(email);
   if(result.ok){
-    window._signinState = 'sent';
+    window._signinState = 'code';
     window._signinError = '';
   } else {
     window._signinState = 'form';
-    window._signinError = result.error || 'Could not send sign-in email. Please try again.';
+    window._signinError = result.error || 'Could not send code. Please try again.';
   }
+  go('signin');
+  if(result.ok) setTimeout(function(){var c=$('signin-code');if(c)c.focus();},150);
+}
+
+// Verify the entered code
+async function signinVerify(){
+  var codeEl = $('signin-code');
+  if(!codeEl) return;
+  var code = String(codeEl.value||'').replace(/\D/g,'');
+  if(code.length!==6){ window._signinError='Enter the 6-digit code from your email'; go('signin'); return; }
+  window._signinError = '';
+  window._signinState = 'verifying';
+  go('signin');
+  var result = await signInVerifyCode(window._signinEmail, code);
+  if(result.ok){
+    // auth-changed event will route to dashboard
+    window._signinState = 'form';
+    window._signinError = '';
+  } else {
+    window._signinState = 'code';
+    window._signinError = result.error || 'Invalid or expired code';
+    go('signin');
+    setTimeout(function(){var c=$('signin-code');if(c){c.value='';c.focus();}},150);
+  }
+}
+
+// Resend the code to the same email
+async function signinResend(){
+  if(!window._signinEmail) { signinReset(); return; }
+  window._signinError='';
+  var result = await signInSendCode(window._signinEmail);
+  window._signinError = result.ok ? '' : (result.error||'Could not resend');
+  if(result.ok && typeof showToast==='function') showToast('✓ New code sent','ok');
   go('signin');
 }
 
-// "Use a different email" — reset the sign-in screen back to the form
+// Back to the email form
 function signinReset(){
   window._signinState = 'form';
   window._signinError = '';
-  // Keep the previous email visible so they can edit it instead of retyping
   go('signin');
 }
 
@@ -5549,7 +5649,7 @@ function initDashSort(){
 // ═══ BILLING ═════════════════════════════════════════════════════
 function billingH(){
   var hasCharter=S.ac&&S.ac.charterEnabled;
-  var tabs=[{k:'overview',t:'OVERVIEW'},{k:'expenses',t:'EXPENSES'},{k:'reports',t:'REPORTS'},{k:'summary',t:'SUMMARY'}];
+  var tabs=[{k:'overview',t:'OVERVIEW'},{k:'expenses',t:'EXPENSES'},{k:'insights',t:'📊 INSIGHTS'},{k:'reports',t:'REPORTS'},{k:'summary',t:'SUMMARY'}];
   if(hasCharter) tabs.push({k:'charter',t:'CHARTER P&L'});
   if(hasCharter) tabs.push({k:'invoice',t:'INVOICE'});
   tabs.push({k:'new',t:'+ NEW'});
@@ -5557,6 +5657,9 @@ function billingH(){
   var body='';
 
   // ── EXPENSES TAB ────────────────────────────────────────────────
+  if(S.bilTab==='insights'){
+    body=fmCostInsightsH();
+  }
   if(S.bilTab==='expenses'){
     body=buildExpensesTab();
   }
@@ -7492,6 +7595,369 @@ function docsAddWithCat(cat,files){
 
 // ═══ EXPENSE TRACKER ═════════════════════════════════════════════
 
+// ═══════════ FLIGHT & COST INSIGHTS (ported from N666SP Flight Logbook Dashboard) ═══════════
+var FM_DATA={"home":"KHWO","apts":{"KHWO":[26.0012,-80.2407,"North Perry","Hollywood"],"KSEF":[27.4564,-81.3424,"Sebring Regional","Sebring"],"2RR":[27.7822,-81.2053,"River Ranch Resort","River Ranch"],"KOBE":[27.2628,-80.8498,"Okeechobee County","Okeechobee"],"KSUA":[27.1817,-80.2211,"Witham Field","Stuart"],"KZPH":[28.2282,-82.1559,"Zephyrhills Municipal","Zephyrhills"],"KTPF":[27.9156,-82.4493,"Peter O Knight","Tampa"],"KMLB":[28.10201,-80.64109,"Melbourne Orlando International","Melbourne"],"KAPF":[26.1526,-81.7753,"Naples Municipal","Naples"],"KORL":[28.5455,-81.3329,"Orlando Executive","Orlando"],"X35":[29.0618,-82.3766,"Dunnellon Marion Co & Park of Commerce","Dunnellon"],"KLAL":[27.98927,-82.02071,"Lakeland Linder International","Lakeland"],"KVNC":[27.07054,-82.44082,"Venice Municipal","Venice"],"KMTH":[24.72601,-81.05138,"Florida Keys Marathon International","Marathon"],"2IS":[26.7352,-81.05108,"Airglades","Clewiston"],"FD70":[27.3253,-81.0287,"River Acres","Okeechobee"],"KEYW":[24.55612,-81.75958,"Key West International","Key West"],"KSRQ":[27.39463,-82.55436,"Sarasota Bradenton International","Sarasota/Bradenton"],"X14":[26.7442,-81.4326,"La Belle Municipal","La Belle"],"X06":[27.19555,-81.83729,"Arcadia Municipal","Arcadia"],"KSSI":[31.1518,-81.3913,"St Simons Island","St Simons Island"],"KLYH":[37.3267,-79.2004,"Lynchburg Regional - Preston Glenn Field","Lynchburg"],"KHWY":[38.5863,-77.7106,"Warrenton Fauquier","Midland"],"KARW":[32.4122,-80.6344,"Beaufort Executive","Beaufort"],"X49":[27.9334,-82.044,"South Lakeland","Lakeland"],"KCHN":[27.5149,-81.8805,"Wauchula Municipal","Wauchula"],"40J":[30.0693,-83.5806,"Perry-Foley","Perry"],"KUBS":[33.4654,-88.3803,"Columbus Lowndes County","Columbus"],"KFYV":[36.0051,-94.1701,"Drake Field","Fayetteville"],"KDDC":[37.7634,-99.9656,"Dodge City Regional","Dodge City"],"KAPA":[39.5701,-104.849,"Centennial","Denver"],"KLND":[42.8152,-108.73,"Hunt Field","Lander"],"KRIW":[43.0642,-108.46,"Central Wyoming Regional","Riverton"],"KIDA":[43.5146,-112.071,"Idaho Falls Regional","Idaho Falls"],"KCNY":[38.755,-109.755,"Canyonlands Regional","Moab"],"2KS5":[37.26675,-100.58379,"Plains Municipal","Plains"],"KJSV":[35.4382,-94.8028,"Sallisaw Municipal","Sallisaw"],"KGJT":[39.12666,-108.52939,"Grand Junction Regional","Grand Junction"],"1K9":[37.45667,-100.98466,"Satanta Municipal","Satanta"],"KGNF":[33.8325,-89.7982,"Grenada Municipal","Grenada"],"06A":[32.4605,-85.68,"Moton Field Municipal","Tuskegee"],"KAVO":[27.5912,-81.5278,"Avon Park Executive","Avon Park"],"KDED":[29.067,-81.2838,"Deland Municipal Sidney H Taylor Field","Deland"],"KVRB":[27.6556,-80.4179,"Vero Beach Regional","Vero Beach"],"KMKY":[25.995,-81.6725,"Marco Island Executive","Marco Island"],"KSPG":[27.7651,-82.627,"Albert Whitted","St Petersburg"],"X51":[25.4992,-80.5543,"Miami Homestead General Aviation","Homestead"],"KTMB":[25.6479,-80.4328,"Miami Executive","Miami"],"KFXE":[26.1973,-80.1707,"Fort Lauderdale Executive","Fort Lauderdale"],"KBCT":[26.3785,-80.1077,"Boca Raton","Boca Raton"],"KPHK":[26.785,-80.6934,"Palm Beach County Glades","Pahokee"],"08FD":[27.3631,-80.7728,"Sunniland Ranch","Okeechobee"],"KLNA":[26.593,-80.0851,"Palm Beach County Park","West Palm Beach"],"X58":[27.0364,-80.4401,"Indiantown","Indiantown"]},"f":[["2017-11-22","KHWO","KHWO",54,0.0,"23:16"],["2017-11-23","KHWO","KHWO",5,0.0,"21:10"],["2017-11-23","KHWO","KHWO",49,0.0,"21:11"],["2017-11-24","KHWO","KHWO",38,0.0,"16:53"],["2017-12-01","KHWO","KSEF",62,105.5,"13:23"],["2017-12-01","KSEF","KHWO",59,105.5,"18:33"],["2017-12-19","KHWO","KSEF",66,105.5,"19:20"],["2017-12-19","KSEF","2RR",26,20.9,"20:30"],["2017-12-19","2RR","KOBE",22,36.5,"20:51"],["2017-12-19","KOBE","KHWO",68,82.5,"21:39"],["2017-12-20","KHWO","KHWO",30,0.0,"19:17"],["2017-12-23","KHWO","KSEF",59,105.5,"15:19"],["2017-12-23","KSEF","KHWO",62,105.5,"17:32"],["2018-01-04","KHWO","KSEF",68,105.5,"15:29"],["2018-01-04","KSEF","KHWO",55,105.5,"18:02"],["2018-01-26","KHWO","KHWO",39,0.0,"19:02"],["2018-02-07","KHWO","KSUA",46,70.9,"18:46"],["2018-02-07","KSUA","KHWO",53,70.9,"20:45"],["2018-02-12","KHWO","KHWO",42,0.0,"21:24"],["2018-02-21","KHWO","KZPH",89,168.4,"17:46"],["2018-02-21","KZPH","KZPH",18,0.0,"20:09"],["2018-02-21","KZPH","KHWO",98,168.4,"21:11"],["2018-02-24","KHWO","KTPF",80,164.9,"18:11"],["2018-02-25","KTPF","KTPF",35,0.0,"04:12"],["2018-02-25","KTPF","KHWO",87,164.9,"04:53"],["2018-03-17","KHWO","KHWO",3,0.0,"20:03"],["2018-03-17","KHWO","KHWO",79,0.0,"20:08"],["2018-04-17","KHWO","KHWO",40,0.0,"23:25"],["2018-04-20","KHWO","KMLB",98,127.9,"18:42"],["2018-04-21","KMLB","2RR",62,35.6,"16:26"],["2018-04-21","2RR","KHWO",77,118.8,"19:19"],["2018-04-22","KHWO","KHWO",63,0.0,"22:06"],["2018-04-22","KHWO","KHWO",18,0.0,"23:14"],["2018-05-28","KHWO","KHWO",15,0.0,"19:10"],["2018-05-28","KHWO","KHWO",1,0.0,"19:15"],["2018-07-09","KHWO","KHWO",31,0.0,"22:55"],["2018-07-25","KHWO","KAPF",56,83.3,"17:04"],["2018-07-25","KAPF","KHWO",49,83.3,"18:56"],["2018-10-11","KHWO","KHWO",6,0.0,"21:30"],["2018-10-11","KHWO","KHWO",6,0.0,"21:34"],["2018-10-11","KHWO","KHWO",9,0.0,"22:20"],["2018-10-11","KHWO","KHWO",8,0.0,"22:55"],["2018-10-11","KHWO","KHWO",9,0.0,"23:21"],["2018-10-11","KHWO","KHWO",9,0.0,"23:42"],["2018-11-11","KHWO","KHWO",17,0.0,"16:11"],["2018-11-13","KHWO","KHWO",9,0.0,"19:10"],["2018-11-27","KHWO","KORL",101,163.5,""],["2018-11-27","KHWO","KHWO",20,0.0,"20:46"],["2018-11-29","KORL","KHWO",84,163.5,"20:48"],["2018-12-18","KHWO","KTPF",88,164.9,"22:56"],["2018-12-19","KTPF","KSEF",45,65.0,"14:35"],["2018-12-19","KSEF","KHWO",65,105.5,"15:33"],["2019-01-24","KHWO","KSEF",78,105.5,"18:01"],["2019-01-24","KSEF","KHWO",58,105.5,"20:30"],["2019-02-23","KHWO","KSEF",54,105.5,"14:24"],["2019-02-23","KSEF","KHWO",66,105.5,"18:48"],["2019-02-27","KHWO","KHWO",3,0.0,"13:13"],["2019-02-27","KHWO","KSEF",58,105.5,"13:20"],["2019-02-27","KSEF","KHWO",60,105.5,"18:25"],["2019-03-24","KHWO","X35",105,216.1,"16:00"],["2019-03-25","X35","KHWO",108,216.1,"20:07"],["2019-04-03","KHWO","KLAL",80,152.7,"14:21"],["2019-04-03","KLAL","KHWO",81,152.7,"22:06"],["2019-05-30","KHWO","KSEF",62,105.5,"15:30"],["2019-05-30","KSEF","KHWO",60,105.5,"18:21"],["2019-06-02","KHWO","KVNC",82,134.5,"16:52"],["2019-06-02","KVNC","KHWO",71,134.5,"20:18"],["2019-06-04","KHWO","KSEF",62,105.5,"19:51"],["2019-06-04","KSEF","KHWO",69,105.5,"21:26"],["2019-07-03","KHWO","KMTH",64,88.3,"15:32"],["2019-07-03","KMTH","KHWO",60,88.3,"17:57"],["2019-07-13","KHWO","KHWO",41,0.0,"18:27"],["2019-08-09","KHWO","2IS",43,62.0,"15:06"],["2019-08-09","2IS","2IS",16,0.0,"16:20"],["2019-08-09","2IS","FD70",27,35.5,"17:13"],["2019-08-09","KHWO","KHWO",3,0.0,"19:52"],["2019-08-16","KHWO","KHWO",30,0.0,"02:15"],["2019-08-21","KHWO","KEYW",72,119.7,"16:09"],["2019-08-21","KEYW","KHWO",83,119.7,"22:29"],["2019-10-29","KHWO","KSRQ",86,149.7,"15:38"],["2019-10-29","KSRQ","X14",50,71.6,"19:47"],["2019-10-29","X14","KHWO",44,78.1,"20:32"],["2019-10-31","KHWO","KAPF",58,83.3,"16:08"],["2019-10-31","KAPF","KHWO",58,83.3,"18:56"],["2019-11-18","KHWO","KTPF",102,164.9,"16:31"],["2019-11-18","KTPF","KHWO",81,164.9,"23:02"],["2020-04-09","KHWO","KHWO",34,0.0,"20:12"],["2020-05-05","KHWO","X06",61,111.8,"16:02"],["2020-05-05","X06","KHWO",65,111.8,"18:08"],["2020-05-13","KHWO","KMTH",56,88.3,"17:13"],["2020-05-13","KMTH","KHWO",68,88.3,"20:39"],["2020-06-23","KMTH","KHWO",70,88.3,"19:26"],["2020-06-26","KHWO","KSSI",154,315.1,"17:42"],["2020-06-26","KSSI","KLYH",187,386.3,"20:45"],["2020-06-27","KLYH","KHWY",52,103.4,"13:56"],["2020-06-27","KHWY","KARW",192,397.2,"19:01"],["2020-06-27","KARW","KHWO",181,385.5,"22:25"],["2020-07-22","X49","KCHN",18,26.6,""],["2020-07-22","KHWO","KZPH",80,168.4,"13:15"],["2020-07-22","KCHN","KHWO",69,126.4,"19:06"],["2020-08-05","KHWO","KZPH",77,168.4,"13:59"],["2020-08-05","KZPH","KHWO",89,168.4,"18:21"],["2020-08-07","KHWO","KZPH",70,168.4,"11:53"],["2020-08-07","KZPH","KHWO",81,168.4,"21:52"],["2020-09-01","KHWO","KHWO",15,0.0,"00:01"],["2020-09-01","KHWO","KHWO",19,0.0,"00:41"],["2020-09-04","KHWO","KAPF",42,83.3,"18:51"],["2020-09-04","KAPF","KHWO",50,83.3,"21:01"],["2020-09-05","KHWO","40J",143,301.6,"18:34"],["2020-09-05","40J","KUBS",152,318.7,"21:32"],["2020-09-06","KUBS","KFYV",158,323.7,"15:19"],["2020-09-06","KFYV","KDDC",162,297.6,"19:15"],["2020-09-06","KDDC","KAPA",132,253.3,"22:12"],["2020-09-10","KAPA","KAPA",21,0.0,"01:18"],["2020-09-10","KAPA","KLND",152,262.1,"15:57"],["2020-09-10","KLND","KRIW",14,19.1,"18:51"],["2020-09-10","KRIW","KIDA",81,160.1,"19:24"],["2020-09-12","KIDA","KCNY",166,304.3,"20:02"],["2020-09-12","KCNY","KCNY",35,0.0,"23:07"],["2020-09-14","2KS5","KJSV",143,300.3,""],["2020-09-14","KCNY","KGJT",40,61.4,"15:07"],["2020-09-14","KGJT","1K9",182,369.3,"16:09"],["2020-09-15","KGNF","06A",142,222.8,"15:16"],["2020-09-15","06A","X35",148,265.8,"17:53"],["2020-09-15","X35","KHWO",114,216.1,"20:31"],["2020-09-15","KJSV","KGNF",36,265.3,"22:41"],["2020-09-25","KHWO","KHWO",10,0.0,"20:36"],["2020-09-25","KHWO","KHWO",15,0.0,"20:45"],["2020-10-02","KHWO","KSEF",55,105.5,"15:04"],["2020-10-02","KSEF","KHWO",54,105.5,"18:54"],["2020-10-03","KHWO","X35",98,216.1,"11:56"],["2020-10-04","KAVO","KHWO",106,117.8,"14:22"],["2020-10-05","KHWO","KHWO",14,0.0,"23:57"],["2020-10-06","KHWO","KHWO",9,0.0,"15:26"],["2020-10-06","KHWO","X06",62,111.8,"15:53"],["2020-10-06","X06","KHWO",70,111.8,"18:24"],["2020-10-28","KHWO","KHWO",34,0.0,"23:01"],["2020-10-29","KHWO","X06",64,111.8,"15:09"],["2020-10-29","X06","KHWO",62,111.8,"18:20"],["2020-10-31","KHWO","KDED",92,192.3,"14:15"],["2020-10-31","KDED","KDED",69,0.0,"17:07"],["2020-10-31","KDED","KHWO",96,192.3,"18:32"],["2020-11-14","KHWO","KVRB",36,99.8,"13:43"],["2020-11-14","KVRB","KHWO",65,99.8,"16:13"],["2020-12-09","KHWO","KHWO",44,0.0,"22:01"],["2021-01-23","KHWO","KMKY",47,77.3,"17:54"],["2021-01-23","KMKY","KHWO",44,77.3,"21:21"],["2021-03-27","KHWO","KHWO",22,0.0,"22:31"],["2021-04-06","KHWO","X06",69,111.8,"15:03"],["2021-04-06","X06","KSPG",32,54.2,"17:25"],["2021-04-06","KSPG","KHWO",80,166.0,"21:19"],["2021-04-22","KHWO","KVRB",86,99.8,"15:25"],["2021-04-22","KVRB","KHWO",61,99.8,"17:59"],["2021-05-08","KHWO","KMTH",56,88.3,"15:12"],["2021-05-08","KMTH","KHWO",58,88.3,"18:26"],["2021-08-08","KHWO","KSUA",43,70.9,"15:55"],["2021-08-08","KSUA","KSUA",1,0.0,"16:33"],["2021-08-08","KSUA","KHWO",45,70.9,"21:44"],["2021-08-24","KHWO","X06",49,111.8,""],["2021-08-24","X06","KHWO",61,111.8,"19:29"],["2021-09-12","KHWO","KEYW",29,119.7,"15:37"],["2021-09-12","KEYW","KHWO",70,119.7,"19:48"],["2021-12-25","KHWO","KHWO",35,0.0,"23:04"],["2021-12-27","KHWO","KHWO",22,0.0,"19:32"],["2021-12-29","KHWO","KHWO",39,0.0,"22:21"],["2022-03-30","KHWO","KHWO",27,0.0,"00:53"],["2022-04-26","KHWO","X06",67,111.8,"14:15"],["2022-04-26","X06","KHWO",60,111.8,"16:20"],["2022-05-11","KHWO","KSRQ",87,149.7,"14:29"],["2022-05-12","KSRQ","KHWO",82,149.7,"23:35"],["2022-07-02","KHWO","KHWO",29,0.0,"01:43"],["2022-07-12","KHWO","KHWO",11,0.0,"14:15"],["2022-07-12","KHWO","X06",58,111.8,"14:27"],["2022-07-12","X06","KHWO",60,111.8,"16:39"],["2022-08-10","KHWO","KHWO",17,0.0,"23:13"],["2022-09-03","KHWO","KEYW",66,119.7,"17:23"],["2022-09-03","KEYW","KHWO",75,119.7,"21:56"],["2023-02-27","KHWO","KHWO",39,0.0,"20:09"],["2023-03-28","KHWO","KHWO",7,0.0,"22:39"],["2023-03-30","KHWO","KHWO",22,0.0,"23:39"],["2023-04-06","KHWO","KHWO",34,0.0,"02:51"],["2023-05-15","KHWO","KHWO",51,0.0,"15:54"],["2023-12-23","KHWO","KHWO",16,0.0,"22:23"],["2023-12-23","KHWO","KHWO",15,0.0,"23:02"],["2023-12-27","KHWO","KHWO",27,0.0,"20:20"],["2024-03-19","KHWO","KHWO",10,0.0,"20:17"],["2024-07-02","KHWO","KHWO",53,0.0,"20:04"],["2024-10-01","KHWO","KHWO",13,0.0,"19:32"],["2024-10-01","KHWO","KHWO",15,0.0,"22:09"],["2024-10-01","KHWO","KHWO",41,0.0,"22:21"],["2024-10-15","KHWO","KHWO",83,0.0,"21:07"],["2024-11-02","KHWO","KHWO",43,0.0,"21:23"],["2024-11-10","KHWO","KHWO",45,0.0,"15:15"],["2024-11-22","KHWO","X51",47,34.6,"13:57"],["2024-11-22","X51","KHWO",28,34.6,"22:18"],["2024-11-29","KHWO","KHWO",45,0.0,"13:45"],["2024-12-02","KHWO","KHWO",16,0.0,"21:58"],["2024-12-04","KHWO","KHWO",21,0.0,"22:16"],["2024-12-19","KHWO","KHWO",93,0.0,"20:10"],["2024-12-23","KHWO","KHWO",10,0.0,"20:31"],["2024-12-23","KHWO","KHWO",7,0.0,"22:07"],["2024-12-26","KHWO","KMKY",47,77.3,"17:15"],["2024-12-26","KMKY","KHWO",53,77.3,"21:18"],["2025-01-07","KHWO","KHWO",17,0.0,"19:39"],["2025-01-13","KHWO","KSEF",82,105.5,"15:49"],["2025-01-13","KSEF","KHWO",62,105.5,"20:17"],["2025-01-17","KHWO","KHWO",34,0.0,"21:46"],["2025-02-02","KHWO","KHWO",70,0.0,"14:29"],["2025-02-04","KHWO","KHWO",44,0.0,"21:31"],["2025-02-05","KHWO","KHWO",20,0.0,"22:56"],["2025-02-09","KHWO","KMTH",65,88.3,"17:41"],["2025-02-09","KMTH","KHWO",58,88.3,"20:44"],["2025-02-10","KHWO","KHWO",41,0.0,"22:54"],["2025-02-17","KHWO","KHWO",29,0.0,"22:11"],["2025-03-07","KHWO","KHWO",33,0.0,"22:13"],["2025-03-12","KHWO","KHWO",24,0.0,"22:46"],["2025-03-19","KHWO","KAPF",61,83.3,"16:38"],["2025-03-19","KAPF","KHWO",57,83.3,"20:19"],["2025-04-05","KHWO","KHWO",41,0.0,"13:30"],["2025-05-03","KHWO","KHWO",49,0.0,"11:03"],["2025-05-07","KHWO","KTMB",22,23.6,"16:44"],["2025-05-07","KTMB","KMKY",55,70.2,"18:12"],["2025-05-07","KMKY","KHWO",45,77.3,"22:26"],["2025-05-16","KHWO","KSUA",61,70.9,"14:44"],["2025-05-16","KSUA","KSUA",21,0.0,"18:10"],["2025-05-16","KSUA","KSUA",14,0.0,"19:22"],["2025-05-16","KSUA","KSUA",16,0.0,"20:15"],["2025-05-17","KSUA","KSUA",15,0.0,"18:19"],["2025-05-17","KSUA","KHWO",52,70.9,"19:26"],["2025-05-20","KHWO","X06",86,111.8,"14:49"],["2025-05-20","X06","KHWO",62,111.8,"18:06"],["2025-05-25","KHWO","KMKY",51,77.3,"11:18"],["2025-05-25","KMKY","KHWO",46,77.3,"14:04"],["2025-06-01","KHWO","KHWO",11,0.0,"11:42"],["2025-06-01","KHWO","KHWO",42,0.0,"12:33"],["2025-06-12","KHWO","KHWO",20,0.0,"23:04"],["2025-06-13","KHWO","KHWO",40,0.0,"20:54"],["2025-07-02","KHWO","KHWO",33,0.0,"21:15"],["2025-07-09","KHWO","KHWO",45,0.0,"22:11"],["2025-07-18","KHWO","KHWO",44,0.0,"21:06"],["2025-07-19","KHWO","KFXE",41,12.4,"11:45"],["2025-07-19","KFXE","KHWO",32,12.4,"13:37"],["2025-07-22","KHWO","KFXE",24,12.4,"17:14"],["2025-07-22","KFXE","KHWO",15,12.4,"19:35"],["2025-07-30","KHWO","KHWO",16,0.0,"20:52"],["2025-08-01","KHWO","KHWO",62,0.0,"20:24"],["2025-08-02","KHWO","KBCT",24,23.8,"11:25"],["2025-08-02","KBCT","KHWO",45,23.8,"13:29"],["2025-08-12","KHWO","KHWO",16,0.0,"17:50"],["2025-08-24","KHWO","KTMB",33,23.6,"12:50"],["2025-08-24","KTMB","X51",19,11.1,"14:27"],["2025-08-24","X51","KHWO",40,34.6,"15:46"],["2025-09-01","KHWO","KHWO",38,0.0,"12:51"],["2025-09-09","KHWO","KHWO",41,0.0,"21:21"],["2025-09-19","KHWO","KHWO",37,0.0,"19:49"],["2025-09-20","KHWO","KMKY",53,77.3,"12:02"],["2025-09-20","KMKY","KHWO",47,77.3,"15:09"],["2025-09-30","KHWO","KHWO",28,0.0,"21:07"],["2025-10-05","KHWO","KPHK",40,53.0,"12:04"],["2025-10-05","KPHK","KHWO",40,53.0,"12:56"],["2025-10-10","KHWO","KHWO",17,0.0,"21:58"],["2025-10-19","KHWO","KMKY",64,77.3,"12:08"],["2025-10-19","KMKY","KHWO",50,77.3,"13:41"],["2025-10-20","KHWO","KSEF",60,105.5,"14:01"],["2025-10-20","KSEF","KHWO",61,105.5,"19:14"],["2025-10-30","KHWO","08FD",59,86.6,"15:48"],["2025-10-30","08FD","KHWO",48,86.6,"19:05"],["2025-11-13","KHWO","KMTH",55,88.3,"17:49"],["2025-11-13","KMTH","KHWO",65,88.3,"21:47"],["2025-11-21","KHWO","KHWO",39,0.0,"20:48"],["2025-11-23","KHWO","KHWO",91,0.0,"13:17"],["2025-12-10","KHWO","KHWO",39,0.0,"21:37"],["2025-12-12","KHWO","KSUA",55,70.9,"17:44"],["2025-12-12","KSUA","KHWO",63,70.9,"20:51"],["2026-01-19","KHWO","KHWO",31,0.0,"13:37"],["2026-01-23","KHWO","KHWO",53,0.0,"21:42"],["2026-01-25","KHWO","KMKY",57,77.3,"13:26"],["2026-01-25","KMKY","KHWO",48,77.3,"14:38"],["2026-01-26","KHWO","KHWO",49,0.0,"23:13"],["2026-02-09","KHWO","KHWO",38,0.0,"21:41"],["2026-02-10","KHWO","X06",68,111.8,"16:01"],["2026-02-10","X06","KHWO",61,111.8,"20:26"],["2026-02-24","KHWO","X14",66,78.1,"17:36"],["2026-02-24","X14","KHWO",44,78.1,"20:40"],["2026-03-07","KHWO","KORL",89,163.5,"13:22"],["2026-03-08","KBCT","KBCT",5,0.0,"16:09"],["2026-03-08","KBCT","KHWO",31,23.8,"16:33"],["2026-03-23","KHWO","KHWO",46,0.0,"20:07"],["2026-03-25","KHWO","KHWO",7,0.0,"21:37"],["2026-03-25","KHWO","KHWO",1,0.0,"21:39"],["2026-03-25","KHWO","KHWO",48,0.0,"21:41"],["2026-03-25","KHWO","KHWO",1,0.0,"22:29"],["2026-03-26","KHWO","KHWO",42,0.0,"22:57"],["2026-04-10","KHWO","KCHN",72,126.4,"14:04"],["2026-04-10","KCHN","X06",20,19.3,"17:21"],["2026-04-10","X06","KHWO",13,111.8,"17:52"],["2026-04-17","KHWO","KLAL",97,152.7,"11:33"],["2026-04-19","KLAL","X14",58,81.1,"11:44"],["2026-04-19","X14","KHWO",33,78.1,"13:13"],["2026-05-01","KHWO","KHWO",14,0.0,"20:54"],["2026-05-01","KHWO","KHWO",45,0.0,"21:07"],["2026-05-09","KHWO","KHWO",47,0.0,"13:43"],["2026-05-19","KHWO","KHWO",50,0.0,"22:56"],["2026-06-08","KHWO","KHWO",42,0.0,"22:55"],["2026-06-10","KHWO","KLNA",32,36.5,"21:58"],["2026-06-10","KLNA","KHWO",36,36.5,"22:37"],["2026-06-14","KHWO","X58",45,63.1,"13:08"],["2026-06-14","X58","KHWO",40,63.1,"14:01"],["2026-07-19","KHWO","X14",46,78.1,"11:29"],["2026-07-19","X14","KHWO",44,78.1,"12:53"],["2026-07-24","KHWO","KHWO",38,0.0,"21:45"]],"tx":[["2024-09-02",33.57,"Payment to Aerosoft","Upgrade"],["2024-10-31",350.0,"Zelle payment to ANDRES VELASCO","Upgrade"],["2024-12-02",964.33,"Hollywood Aviation","Hangar"],["2024-12-10",375.0,"Zelle","Upgrade"],["2025-01-02",482.16,"Hollywood Aviation","Fuel"],["2025-01-06",118.9,"Banyan","Upgrade"],["2025-01-07",32.95,"Hollywood Aviation Lpembroke","Fuel"],["2025-01-13",117.12,"Lockwood Aviation Supply","Parts"],["2025-01-13",8.56,"Lockwood Aviation Supply","Parts"],["2025-01-25",54.89,"Hollywood Aviation","Fuel"],["2025-02-01",743.92,"Hollywood Aviation","Hangar"],["2025-02-12",686.95,"Wings and Wheels Inc","Upgrade"],["2025-02-14",2547.93,"Avionics","Upgrade"],["2025-03-01",743.92,"Hollywood Aviation","Hangar"],["2025-03-06",1500.0,"Zelle","Upgrade"],["2025-03-09",115.42,"Aircraft Spruce & Specialty Co.","Upgrade"],["2025-03-19",20.99,"City of Naples","Fuel"],["2025-04-01",743.92,"Hollywood Aviation","Hangar"],["2025-04-07",-86.0,"Zelle","Refund"],["2025-05-01",743.92,"Hollywood Aviation","Hangar"],["2025-05-07",36.11,"Hollywood Aviation","Fuel"],["2025-05-16",97.72,"Ross Aviation Stuart Jet","Fuel"],["2025-05-19",33.35,"Hollywood Aviation","Fuel"],["2025-05-25",46.2,"Hollywood Aviation Lpembroke","Fuel"],["2025-05-28",1486.22,"Banyan","Upgrade"],["2025-05-30",26.43,"Hollywood Aviation","Fuel"],["2025-06-02",743.92,"Hollywood Aviation","Hangar"],["2025-06-09",21.85,"Mypilotstore.com","Upgrade"],["2025-06-12",26.62,"Hollywood Aviation","Fuel"],["2025-06-14",18.18,"West Marine","Parts"],["2025-06-29",98.22,"West Marine","Parts"],["2025-07-01",743.92,"Hollywood Aviation","Hangar"],["2025-07-01",113.84,"Ulm Technologie","Upgrade"],["2025-07-13",28.78,"Wayman Pilot Supply","Upgrade"],["2025-07-22",59.57,"Hollywood Aviation","Fuel"],["2025-08-01",2.0,"Hollywood Aviation","Fuel"],["2025-08-01",26.43,"Hollywood Aviation","Fuel"],["2025-08-01",743.92,"Hollywood Aviation","Hangar"],["2025-08-01",72.63,"Aircraft Spruce & Specialty Co.","Upgrade"],["2025-08-02",136.11,"Signature Flight Support","Fuel"],["2025-08-24",33.08,"Hollywood Aviation Lpembroke","Fuel"],["2025-08-28",865.63,"eBay","Upgrade"],["2025-09-02",743.92,"Hollywood Aviation","Hangar"],["2025-09-08",-418.48,"Zelle","Refund"],["2025-09-15",-200.0,"Zelle","Refund"],["2025-09-19",31.63,"Hollywood Aviation","Fuel"],["2025-09-20",18.96,"Marco City Exec Airport","Fuel"],["2025-10-01",692.84,"Hollywood Aviation","Hangar"],["2025-10-02",480.0,"Avionics","Upgrade"],["2025-10-06",50.91,"PayPal","Parts"],["2025-10-20",33.12,"Lockwood Aviation","Fuel"],["2025-11-03",687.84,"Hollywood Aviation","Hangar"],["2025-11-04",1705.17,"Fielden Aero","Upgrade"],["2025-11-10",0.07,"Hollywood Aviation","Fuel"],["2025-11-26",30.0,"Zelle","Upgrade"],["2025-12-03",42.04,"West Marine","Parts"],["2025-12-10",687.84,"Hollywood Aviation","Hangar"],["2025-12-29",1000.0,"Zelle","Upgrade"],["2025-12-30",500.0,"Zelle payment to HECTOR LOPEZ","Upgrade"],["2026-01-05",687.84,"Hollywood Aviation","Hangar"],["2026-01-23",33.28,"Hollywood Aviation","Fuel"],["2026-01-25",33.28,"Hollywood Aviation","Fuel"],["2026-01-25",22.25,"Marco City Exec Airport","Fuel"],["2026-02-05",738.0,"Hollywood Aviation","Hangar"],["2026-02-11",46.2,"Hollywood Aviation","Fuel"],["2026-02-12",260.0,"Avionics","Upgrade"],["2026-03-03",738.0,"Hollywood Aviation","Hangar"],["2026-03-24",49.09,"eBay","Parts"],["2026-04-03",738.0,"Hollywood Aviation","Hangar"],["2026-04-17",24.6,"Spencer Aircraft Supply","Parts"],["2026-04-18",679.55,"Advanced Powerplant Solutions","Upgrade"],["2026-05-01",738.0,"Hollywood Aviation","Hangar"],["2026-05-21",60.42,"Hollywood Aviation","Fuel"],["2026-05-21",71.36,"Motive Aero","Upgrade"],["2026-05-21",146.44,"Lockwood Aviation Supply","Upgrade"],["2026-05-26",272.0,"GRT Avionics","Upgrade"],["2026-06-01",738.0,"Hollywood Aviation","Hangar"],["2026-06-03",850.0,"Zelle","Annual"],["2026-06-10",45.39,"Hollywood Aviation","Fuel"],["2026-07-01",738.0,"Hollywood Aviation","Hangar"],["2026-07-14",1205.91,"Bank of America","Insurance"],["2026-08-01",738.0,"Hollywood Aviation","Hangar"],["2026-08-05",12.83,"Big Wheel Cycles","Parts"],["2026-08-19",69.33,"Big Wheel Bicycles","Parts"],["2026-08-19",12.52,"Big Wheel Bicycles","Parts"]],"burn":5.6,"mogas":3.25};
+
+function fmAptCoord(code){
+  if(!code) return null;
+  code=String(code).toUpperCase().trim();
+  var a=FM_DATA.apts[code];
+  if(a) return [a[0],a[1]];
+  try{ return getAirportCoord(code); }catch(e){ return null; }
+}
+function fmAptName(code){
+  var a=FM_DATA.apts[code];
+  return a?(a[2]+(a[3]?', '+a[3]:'')):'';
+}
+
+// ── One-time import of dashboard flights & expenses ──
+var FM_CATMAP={Fuel:'fuel',Hangar:'hangar',Insurance:'insurance',Annual:'maintenance',Parts:'maintenance',Upgrade:'upgrade',Refund:'upgrade'};
+function fmImportData(){
+  if(!S.logbook)S.logbook=[];
+  if(!S.expenses)S.expenses=[];
+  var added=0,addedX=0,seen={},seenX={};
+  S.logbook.forEach(function(f){var k=f.date+'|'+f.from+'|'+f.to+'|'+Math.round((parseFloat(f.time)||0)*60);seen[k]=(seen[k]||0)+1;});
+  FM_DATA.f.forEach(function(r){
+    var key=r[0]+'|'+r[1]+'|'+r[2]+'|'+r[3];
+    if(seen[key]>0){seen[key]--;return;}
+    var hrs=Math.round(r[3]/60*100)/100;
+    S.logbook.push({date:r[0],from:r[1],to:r[2],time:hrs,pic:hrs,ac:'N666SP',nm:r[4],dep:r[5],notes:'',pilot:(S.pilot&&S.pilot.name)||'',source:'fmimport'});
+    added++;
+  });
+  S.expenses.forEach(function(e){var k=e.date+'|'+e.amount+'|'+(e.description||'');seenX[k]=(seenX[k]||0)+1;});
+  FM_DATA.tx.forEach(function(t,i){
+    var desc=t[2]+(t[3]==='Refund'?' (refund)':'')+(t[3]==='Annual'?' — annual inspection':'');
+    var xkey=t[0]+'|'+t[1]+'|'+desc;
+    if(seenX[xkey]>0){seenX[xkey]--;return;}
+    S.expenses.push({id:'fm_'+i+'_'+t[0],date:t[0],amount:t[1],cat:FM_CATMAP[t[3]]||'other',
+      description:desc,owner:(S.pilot&&S.pilot.name)||'',notes:'',source:'fmimport'});
+    addedX++;
+  });
+  S.logbook.sort(function(a,b){return b.date>a.date?1:b.date<a.date?-1:0;});
+  S.expenses.sort(function(a,b){return b.date>a.date?1:b.date<a.date?-1:0;});
+  S.totalHours=Math.round(S.logbook.reduce(function(s,f){return s+(parseFloat(f.time)||0);},0)*10)/10;
+  S._fmImported=true;
+  saveState();
+  showToast('✓ Imported '+added+' flights & '+addedX+' expenses','ok');
+  go(S.screen);
+}
+
+function fmImportBannerH(){
+  if(S._fmImported) return '';
+  return '<div style="background:var(--teal-l);border:1px solid var(--teal);border-radius:12px;padding:12px 14px;margin-bottom:12px">'
+    +'<div style="font-size:13px;font-weight:700;color:var(--teal-d);margin-bottom:4px">Import N666SP history</div>'
+    +'<div style="font-size:12px;color:var(--t2);margin-bottom:8px">Load '+FM_DATA.f.length+' flights and '+FM_DATA.tx.length+' expenses from your Flight Logbook Dashboard (2017–2026). Duplicates are skipped.</div>'
+    +'<button class="btn primary" style="font-size:13px;padding:8px 14px" onclick="fmImportData()">Import now</button>'
+    +'</div>';
+}
+
+// ── Shared selection ──
+function fmFlights(){
+  return (S.logbook||[]).filter(function(f){return f.date&&f.from&&f.to;});
+}
+function fmSelFlights(){
+  var lb=fmFlights(), y=S._fmYear||'all';
+  return y==='all'?lb:lb.filter(function(f){return String(f.date).slice(0,4)===y;});
+}
+function fmHrs(f){return parseFloat(f.time)||0;}
+function fmNm(f){
+  if(f.nm!=null) return parseFloat(f.nm)||0;
+  if(f.from===f.to) return 0;
+  var a=fmAptCoord(f.from),b=fmAptCoord(f.to);
+  if(!a||!b) return 0;
+  try{ return greatCircleNm(a[0],a[1],b[0],b[1]); }catch(e){ return 0; }
+}
+
+// ── Tiny SVG bar chart ──
+function fmBars(data,opts){
+  opts=opts||{};
+  var W=360,H=opts.h||150,mb=22,mt=16,ml=4,mr=4;
+  var iw=W-ml-mr, ih=H-mt-mb;
+  var peak=1; data.forEach(function(d){peak=Math.max(peak,(d.v||0)+(d.v2||0));});
+  var n=Math.max(1,data.length), bw=Math.max(3,Math.min(36,iw/n-4)), gap=(iw-bw*n)/(n+1);
+  var c1=opts.c1||'#0BA5B0', c2=opts.c2||'#FF9500';
+  var fmt=opts.fmt||function(v){return v;};
+  var s='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block">';
+  data.forEach(function(d,i){
+    var x=ml+gap+(bw+gap)*i;
+    var h1=(d.v||0)/peak*ih, h2=(d.v2||0)/peak*ih;
+    var y1=mt+ih-h1, y2=y1-h2;
+    var click=d.oc?' style="cursor:pointer" onclick="'+d.oc+'"':'';
+    if(h2>0.4) s+='<rect x="'+x.toFixed(1)+'" y="'+y2.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+h2.toFixed(1)+'" rx="2" fill="'+c2+'"'+click+'/>';
+    s+='<rect x="'+x.toFixed(1)+'" y="'+y1.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+Math.max(h1,1.2).toFixed(1)+'" rx="2" fill="'+(d.hl?(opts.hc||'#FF9500'):c1)+'"'+click+'/>';
+    if(opts.vals&&((d.v||0)+(d.v2||0))>0){
+      var ty=y2-4; if(ty<mt-4)ty=mt-4;
+      s+='<text x="'+(x+bw/2).toFixed(1)+'" y="'+ty.toFixed(1)+'" font-size="8.5" font-weight="600" fill="var(--t2)" text-anchor="middle">'+fmt((d.v||0)+(d.v2||0))+'</text>';
+    }
+    s+='<text x="'+(x+bw/2).toFixed(1)+'" y="'+(H-6)+'" font-size="9" fill="var(--t2)" text-anchor="middle">'+d.l+'</text>';
+  });
+  s+='</svg>';
+  return s;
+}
+
+function fmTile(lab,val,unit,note,big){
+  return '<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px'+(big?';grid-column:1/-1':'')+'">'
+    +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--t2)">'+lab+'</div>'
+    +'<div style="font-size:'+(big?'28px':'20px')+';font-weight:800;color:var(--t1);margin-top:2px">'+val+(unit?'<span style="font-size:12px;font-weight:600;color:var(--t2)"> '+unit+'</span>':'')+'</div>'
+    +(note?'<div style="font-size:11px;color:var(--t2);margin-top:3px;line-height:1.35">'+note+'</div>':'')
+    +'</div>';
+}
+function fmCard(title,inner,sub){
+  return '<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px">'
+    +'<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:'+(sub?'2':'10')+'px">'+title+'</div>'
+    +(sub?'<div style="font-size:11px;color:var(--t2);margin-bottom:10px">'+sub+'</div>':'')
+    +inner+'</div>';
+}
+function fmYearChips(cur,setter){
+  var lb=fmFlights(),years={};
+  lb.forEach(function(f){years[String(f.date).slice(0,4)]=1;});
+  var yrs=Object.keys(years).sort();
+  var h='<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:10px">';
+  var mk=function(k,t){
+    var on=cur===k;
+    return '<button style="flex:0 0 auto;border-radius:99px;padding:6px 12px;font-size:12px;font-weight:600;border:1px solid '+(on?'var(--teal)':'var(--line)')+';background:'+(on?'var(--teal)':'var(--card)')+';color:'+(on?'#fff':'var(--t1)')+'" onclick="'+setter+'=\''+k+'\';go(S.screen)">'+t+'</button>';
+  };
+  h+=mk('all','All time');
+  yrs.forEach(function(y){h+=mk(y,y);});
+  return h+'</div>';
+}
+
+// ── LOGBOOK INSIGHTS TAB ──
+function fmLogInsightsH(){
+  var sel=fmSelFlights(), all=fmFlights();
+  var y=S._fmYear||'all';
+  var h=fmImportBannerH();
+  h+=fmYearChips(y,'S._fmYear');
+  if(!sel.length){
+    return h+'<div style="text-align:center;color:var(--t2);padding:36px 12px;font-size:13px">No flights'+(y!=='all'?' in '+y:'')+' yet. Log flights or import your history above.</div>';
+  }
+  var hours=0,nm=0,codes={},xc=0;
+  sel.forEach(function(f){
+    hours+=fmHrs(f); nm+=fmNm(f);
+    codes[f.from]=(codes[f.from]||0)+1;
+    codes[f.to]=(codes[f.to]||0)+1;
+    if(f.from!==f.to)xc++;
+  });
+  var nApts=Object.keys(codes).length;
+  var avg=sel.length?hours/sel.length:0;
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'
+    +fmTile('Hours flown',hours.toFixed(1),'h',sel.length+' flights · '+(avg*60).toFixed(0)+' min avg',true)
+    +fmTile('Distance',Math.round(nm).toLocaleString(),'nm','great-circle, legs only')
+    +fmTile('Airports',String(nApts),'',xc+' cross-country legs')
+    +'</div>';
+
+  // Map
+  h+=fmCard('Where you\'ve flown','<div id="fmmap" style="height:300px;border-radius:10px;overflow:hidden"></div>'
+    +'<div style="font-size:10.5px;color:var(--t2);margin-top:8px;line-height:1.4">● dot size = visits · line weight = times flown · tap for details</div>');
+
+  // Hours by year (always all years, highlight selected)
+  var byYear={};
+  all.forEach(function(f){var k=String(f.date).slice(0,4);byYear[k]=(byYear[k]||0)+fmHrs(f);});
+  var yrData=Object.keys(byYear).sort().map(function(k){
+    return {l:'\''+k.slice(2),v:Math.round(byYear[k]*10)/10,hl:k===y,oc:'S._fmYear=(S._fmYear===\''+k+'\'?\'all\':\''+k+'\');go(S.screen)'};
+  });
+  h+=fmCard('Hours by year',fmBars(yrData,{vals:true,fmt:function(v){return v.toFixed?Math.round(v):v;}}),'Tap a bar to filter. Tap again to clear.');
+
+  // Seasonality — hours by calendar month for selection
+  var MN=['J','F','M','A','M','J','J','A','S','O','N','D'];
+  var byMo=new Array(12).fill(0);
+  sel.forEach(function(f){var m=parseInt(String(f.date).slice(5,7),10)-1;if(m>=0&&m<12)byMo[m]+=fmHrs(f);});
+  var moData=byMo.map(function(v,i){return {l:MN[i],v:Math.round(v*10)/10};});
+  h+=fmCard('Hours by month'+(y!=='all'?' — '+y:''),fmBars(moData,{h:120}));
+
+  // Most-visited airports
+  var top=Object.keys(codes).map(function(c){return {c:c,v:codes[c]};}).sort(function(a,b){return b.v-a.v;}).slice(0,8);
+  var rows='';
+  top.forEach(function(a){
+    rows+='<tr><td style="padding:6px 0;font-size:12.5px;font-weight:700;color:var(--t1)">'+esc(a.c)+'</td>'
+      +'<td style="padding:6px 0;font-size:11.5px;color:var(--t2)">'+esc(fmAptName(a.c)||'')+'</td>'
+      +'<td style="padding:6px 0;font-size:12.5px;font-weight:600;color:var(--t1);text-align:right">'+a.v+'</td></tr>';
+  });
+  h+=fmCard('Most-visited airports','<table style="width:100%;border-collapse:collapse">'+rows+'</table>');
+
+  // Top routes
+  var R={};
+  sel.forEach(function(f){
+    if(f.from===f.to)return;
+    var k=[f.from,f.to].sort().join('|');
+    if(!R[k])R[k]={a:k.split('|')[0],b:k.split('|')[1],n:0,h:0,nm:fmNm(f)};
+    R[k].n++; R[k].h+=fmHrs(f);
+  });
+  var routes=Object.keys(R).map(function(k){return R[k];}).sort(function(a,b){return b.n-a.n;}).slice(0,8);
+  var rrows='';
+  routes.forEach(function(r){
+    rrows+='<tr><td style="padding:6px 0;font-size:12.5px;font-weight:700;color:var(--t1)">'+esc(r.a)+' ↔ '+esc(r.b)+'</td>'
+      +'<td style="padding:6px 0;font-size:11.5px;color:var(--t2);text-align:right">'+Math.round(r.nm)+' nm</td>'
+      +'<td style="padding:6px 0;font-size:12.5px;font-weight:600;color:var(--t1);text-align:right">'+r.n+'× · '+r.h.toFixed(1)+'h</td></tr>';
+  });
+  if(routes.length) h+=fmCard('Top routes','<table style="width:100%;border-collapse:collapse">'+rrows+'</table>');
+  return h;
+}
+
+// ── Insights map ──
+var _fmMap=null;
+function fmRenderLogMap(){
+  var el=document.getElementById('fmmap');
+  if(!el||typeof L==='undefined')return;
+  if(_fmMap){try{_fmMap.remove();}catch(e){} _fmMap=null;}
+  var sel=fmSelFlights();
+  var V={},R={};
+  sel.forEach(function(f){
+    V[f.from]=(V[f.from]||0)+1; V[f.to]=(V[f.to]||0)+1;
+    if(f.from!==f.to){
+      var k=[f.from,f.to].sort().join('|');
+      if(!R[k])R[k]={a:k.split('|')[0],b:k.split('|')[1],n:0,h:0};
+      R[k].n++; R[k].h+=fmHrs(f);
+    }
+  });
+  var pts=[];
+  Object.keys(V).forEach(function(c){var p=fmAptCoord(c);if(p)pts.push(p);});
+  try{
+    _fmMap=L.map('fmmap',{scrollWheelZoom:false,zoomControl:true,attributionControl:false,zoomSnap:0.25});
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:14}).addTo(_fmMap);
+  }catch(e){return;}
+  var home=(S.ac&&S.ac.homeBase)||FM_DATA.home;
+  var maxN=1,maxV=1;
+  Object.keys(R).forEach(function(k){maxN=Math.max(maxN,R[k].n);});
+  Object.keys(V).forEach(function(c){maxV=Math.max(maxV,V[c]);});
+  Object.keys(R).map(function(k){return R[k];}).sort(function(a,b){return a.n-b.n;}).forEach(function(r){
+    var pa=fmAptCoord(r.a),pb=fmAptCoord(r.b);
+    if(!pa||!pb)return;
+    var w=1.4+3.6*Math.sqrt(r.n/maxN), op=0.5+0.4*(r.n/maxN);
+    L.polyline([pa,pb],{color:'#0BA5B0',weight:w,opacity:op,lineCap:'round'}).addTo(_fmMap)
+      .bindPopup('<b>'+r.a+' ↔ '+r.b+'</b><br>'+r.n+' leg'+(r.n>1?'s':'')+' · '+r.h.toFixed(1)+' h');
+  });
+  Object.keys(V).sort(function(a,b){return (V[a]||0)-(V[b]||0);}).forEach(function(c){
+    var p=fmAptCoord(c); if(!p)return;
+    var isHome=c===home, v=V[c];
+    var rad=isHome?9:3.2+7*Math.sqrt(v/maxV);
+    L.circleMarker(p,{radius:rad,color:'#fff',weight:2,fillColor:isHome?'#FF9500':'#0BA5B0',fillOpacity:isHome?1:0.9}).addTo(_fmMap)
+      .bindPopup('<b>'+c+(isHome?' — home base':'')+'</b><br>'+esc(fmAptName(c)||'')+'<br>'+v+' arrival/departure'+(v===1?'':'s'));
+  });
+  if(pts.length){
+    try{_fmMap.fitBounds(L.latLngBounds(pts),{padding:[26,26],maxZoom:10.5});}catch(e){}
+  } else {
+    var hp=fmAptCoord(home)||[26.0,-80.24];
+    _fmMap.setView(hp,9);
+  }
+  setTimeout(function(){try{_fmMap&&_fmMap.invalidateSize();}catch(e){}},200);
+}
+
+// ── EXPENSES INSIGHTS TAB ──
+function fmCostInsightsH(){
+  var exp=(typeof getAllExpenses==='function'?getAllExpenses():(S.expenses||[])).filter(function(e){return e.date&&e.amount!=null;});
+  var y=S._fmCYear||'all';
+  var h=fmImportBannerH();
+  // year chips from expense years
+  var years={}; exp.forEach(function(e){years[String(e.date).slice(0,4)]=1;});
+  var yrs=Object.keys(years).sort();
+  var chips='<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:10px">';
+  var mk=function(k,t){var on=y===k;
+    return '<button style="flex:0 0 auto;border-radius:99px;padding:6px 12px;font-size:12px;font-weight:600;border:1px solid '+(on?'var(--teal)':'var(--line)')+';background:'+(on?'var(--teal)':'var(--card)')+';color:'+(on?'#fff':'var(--t1)')+'" onclick="S._fmCYear=\''+k+'\';go(S.screen)">'+t+'</button>';};
+  chips+=mk('all','Full window');
+  yrs.forEach(function(yy){chips+=mk(yy,yy);});
+  h+=chips+'</div>';
+  if(!exp.length){
+    return h+'<div style="text-align:center;color:var(--t2);padding:36px 12px;font-size:13px">No expenses yet. Add expenses or import your history above.</div>';
+  }
+  var sel=y==='all'?exp:exp.filter(function(e){return String(e.date).slice(0,4)===y;});
+  var dates=sel.map(function(e){return e.date;}).sort();
+  var wa=dates[0], wb=dates[dates.length-1];
+  // hours flown in the same window
+  var hours=0;
+  fmFlights().forEach(function(f){
+    if(y==='all'){ if(f.date>=wa&&f.date<=wb)hours+=fmHrs(f); }
+    else if(String(f.date).slice(0,4)===y)hours+=fmHrs(f);
+  });
+  // group by category
+  var g={},total=0;
+  sel.forEach(function(e){var c=e.cat||'other';g[c]=(g[c]||0)+e.amount;total+=e.amount;});
+  var cap=g.upgrade||0;
+  var oper=total-cap;
+  var fuelLogged=g.fuel||0;
+  var burn=FM_DATA.burn, mogas=FM_DATA.mogas;
+  var need=hours*burn*mogas;
+  var gap=Math.max(0,need-fuelLogged);
+  var allin=hours?(oper+gap)/hours:0;
+  var variable=burn*mogas;
+  var money=function(n){return '$'+Math.round(n).toLocaleString();};
+  var money2=function(n){return '$'+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});};
+  var winLabel=y==='all'?(wa&&wb?wa+' → '+wb:''):y;
+
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'
+    +fmTile('All-in cost per hour',money(allin),'/hr',money(oper+gap)+' operating over '+hours.toFixed(1)+' h flown · '+winLabel,true)
+    +fmTile('Variable — next hour',money2(variable),'/hr',burn+' gal/hr × '+money2(mogas)+' mogas')
+    +fmTile('Upgrades (capital)',money(cap),'','excluded from cost/hr')
+    +fmTile('Total spent',money(total),'',sel.length+' transactions')
+    +fmTile('Hangar share',oper?Math.round((g.hangar||0)/oper*100)+'%':'—','',money(g.hangar||0)+' of operating')
+    +'</div>';
+
+  // Where the money went (operating only)
+  var catData=EXP_CATS.filter(function(c){return c.id!=='upgrade'&&(g[c.id]||0)>0;})
+    .sort(function(a,b){return (g[b.id]||0)-(g[a.id]||0);});
+  var peakC=1; catData.forEach(function(c){peakC=Math.max(peakC,g[c.id]);});
+  var catRows='';
+  catData.forEach(function(c){
+    var v=g[c.id];
+    catRows+='<div style="margin-bottom:8px">'
+      +'<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">'
+      +'<span style="font-weight:600;color:var(--t1)">'+c.icon+' '+c.label+'</span>'
+      +'<span style="font-weight:700;color:var(--t1)">'+money(v)+'<span style="color:var(--t2);font-weight:500"> · '+Math.round(v/oper*100)+'%</span></span></div>'
+      +'<div style="height:7px;border-radius:99px;background:var(--line);overflow:hidden">'
+      +'<div style="height:100%;width:'+Math.max(2,v/peakC*100)+'%;border-radius:99px;background:'+c.color+'"></div></div></div>';
+  });
+  h+=fmCard('Where the money went',catRows||'<div style="font-size:12px;color:var(--t2)">No operating expenses</div>','Operating costs only. Upgrades are capital and sit outside cost per hour.');
+
+  // Spending by month — stacked operating vs upgrades, last 14 months of window
+  var byMo={};
+  sel.forEach(function(e){
+    var k=String(e.date).slice(0,7);
+    if(!byMo[k])byMo[k]={o:0,u:0};
+    if((e.cat||'other')==='upgrade')byMo[k].u+=e.amount; else byMo[k].o+=e.amount;
+  });
+  var moKeys=Object.keys(byMo).sort();
+  if(moKeys.length>14)moKeys=moKeys.slice(-14);
+  var MN2=['J','F','M','A','M','J','J','A','S','O','N','D'];
+  var moData=moKeys.map(function(k){
+    var mi=parseInt(k.slice(5,7),10)-1;
+    return {l:MN2[mi],v:Math.max(0,Math.round(byMo[k].o)),v2:Math.max(0,Math.round(byMo[k].u))};
+  });
+  h+=fmCard('Spending by month',fmBars(moData,{h:140,c1:'#0BA5B0',c2:'#FF9500'})
+    +'<div style="display:flex;gap:14px;font-size:11px;color:var(--t2);margin-top:6px">'
+    +'<span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#0BA5B0;margin-right:4px"></span>Operating</span>'
+    +'<span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#FF9500;margin-right:4px"></span>Upgrades (capital)</span></div>',
+    'The lumps are upgrade projects, not the cost of flying.');
+
+  // Cost per hour by year
+  var opByYear={},hrByYear={};
+  exp.forEach(function(e){
+    if((e.cat||'other')==='upgrade')return;
+    var k=String(e.date).slice(0,4);
+    opByYear[k]=(opByYear[k]||0)+e.amount;
+  });
+  fmFlights().forEach(function(f){
+    var k=String(f.date).slice(0,4);
+    hrByYear[k]=(hrByYear[k]||0)+fmHrs(f);
+  });
+  var cyData=Object.keys(opByYear).sort().map(function(k){
+    var hh=hrByYear[k]||0;
+    return {l:'\''+k.slice(2),v:hh?Math.round(opByYear[k]/hh):0};
+  }).filter(function(d){return d.v>0;});
+  if(cyData.length>1) h+=fmCard('Cost per hour, by year',fmBars(cyData,{h:130,vals:true,fmt:function(v){return '$'+v;}}),'Same dollars, divided by how much you flew. Utilisation is the whole story.');
+
+  // Biggest line items
+  var big=sel.slice().filter(function(e){return e.amount>0;}).sort(function(a,b){return b.amount-a.amount;}).slice(0,8);
+  var brows='';
+  big.forEach(function(e){
+    var cdef=null; EXP_CATS.forEach(function(c){if(c.id===(e.cat||'other'))cdef=c;});
+    brows+='<tr><td style="padding:6px 0;font-size:11px;color:var(--t2);white-space:nowrap">'+String(e.date).slice(0,10)+'</td>'
+      +'<td style="padding:6px 8px;font-size:12px;color:var(--t1)">'+esc((e.description||'').slice(0,32))+'<span style="color:var(--t2);font-size:10.5px"> '+(cdef?cdef.label:'')+'</span></td>'
+      +'<td style="padding:6px 0;font-size:12.5px;font-weight:700;color:var(--t1);text-align:right;white-space:nowrap">'+money(e.amount)+'</td></tr>';
+  });
+  h+=fmCard('Biggest line items','<table style="width:100%;border-collapse:collapse">'+brows+'</table>');
+  return h;
+}
+
 var EXP_CATS = [
   {id:'fuel',        label:'Fuel',          icon:'⛽', color:'#0BA5B0'},
   {id:'maintenance', label:'Maintenance',   icon:'🔧', color:'#F59E0B'},
@@ -7500,6 +7966,7 @@ var EXP_CATS = [
   {id:'landing',     label:'Landing fees',  icon:'🛬', color:'#EC4899'},
   {id:'training',    label:'Training',      icon:'🎓', color:'#8B5CF6'},
   {id:'admin',       label:'Admin / Reg.',  icon:'📋', color:'#64748B'},
+  {id:'upgrade',     label:'Upgrades',      icon:'⬆️', color:'#F97316'},
   {id:'other',       label:'Other',         icon:'💡', color:'#94A3B8'}];
 
 var _expFilter = {year: new Date().getFullYear(), month: -1, cat: 'all', owner: 'all', vsLastYear: false};
@@ -12632,11 +13099,15 @@ function recomputeRouteFromCoords(parsed, distNm, p, fuelUnit, cruiseAlt){
 
 // ═══ LOGS / MAINTENANCE ══════════════════════════════════════════
 function logsH(){
-  var tabs=[{k:'status',t:'STATUS'},{k:'squawks',t:'SQUAWKS'},{k:'flightlogs',t:'LOGS'}];
+  var tabs=[{k:'status',t:'STATUS'},{k:'squawks',t:'SQUAWKS'},{k:'flightlogs',t:'LOGS'},{k:'insights',t:'📊 INSIGHTS'}];
   if(S.ac.engine==='turboprop'||S.ac.engine==='jet')tabs.push({k:'tapblue',t:'⚙ ENGINE PROG'});
   var tabsH=tabs.map(function(x){return '<button class="ptab '+(S.logsTab===x.k?'on':'')+'" onclick="S.logsTab=\''+x.k+'\';go(\'logs\')">'+x.t+'</button>';}).join('');
   var body='';
 
+  if(S.logsTab==='insights'){
+    body=fmLogInsightsH();
+    setTimeout(fmRenderLogMap,80);
+  }
   if(S.logsTab==='squawks'){
     if(!S.squawks)S.squawks=[];
     var open=S.squawks.filter(function(s){return s.status!=='closed';});
