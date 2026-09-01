@@ -939,42 +939,6 @@ async function signInWithGoogle(){
   }
 }
 
-// Email a 6-digit one-time code. Returns {ok:true} or {ok:false,error}.
-async function signInSendCode(email){
-  var sb = getSupabase();
-  if(!sb) return {ok:false, error:'Auth not ready — check your connection'};
-  email = String(email||'').trim().toLowerCase();
-  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){
-    return {ok:false, error:'Please enter a valid email address'};
-  }
-  try{
-    var { error } = await sb.auth.signInWithOtp({
-      email: email,
-      options: { shouldCreateUser: true }
-    });
-    if(error) return {ok:false, error:error.message||'Could not send code'};
-    return {ok:true};
-  }catch(e){
-    return {ok:false, error:(e&&e.message)||'Network error'};
-  }
-}
-
-// Verify the 6-digit code. On success Supabase fires auth-changed → dashboard.
-async function signInVerifyCode(email, code){
-  var sb = getSupabase();
-  if(!sb) return {ok:false, error:'Auth not ready'};
-  try{
-    var { error } = await sb.auth.verifyOtp({
-      email: String(email||'').trim().toLowerCase(),
-      token: String(code||'').trim(),
-      type: 'email'
-    });
-    if(error) return {ok:false, error:error.message||'Invalid or expired code'};
-    return {ok:true};
-  }catch(e){
-    return {ok:false, error:(e&&e.message)||'Network error'};
-  }
-}
 
 async function signOut(){
   var sb = getSupabase();
@@ -1765,7 +1729,7 @@ function go(s){
   switch(s){
     case 'login': scr.innerHTML=loginH(); break;
     case 'onboarding': scr.innerHTML=obH(); break;
-    case 'signin': scr.innerHTML=signinH(); setTimeout(function(){var e=$('signin-email');if(e)e.focus();},150); break;
+    case 'signin': scr.innerHTML=signinH(); break;
     case 'dash':
       _dashEditing=false;
       document.body.classList.remove('dash-editing');
@@ -1853,9 +1817,7 @@ function loginH(){
 // they click the link, they land back on the app with a fresh session
 // (handled by detectSessionInUrl in the Supabase client config).
 function signinH(){
-  // Sub-states: form, sending, code (enter 6-digit), verifying
-  var state = window._signinState || 'form';
-  var lastEmail = window._signinEmail || '';
+  var busy = window._signinState === 'sending';
   var lastError = window._signinError || '';
 
   var wrap = '<div style="min-height:100vh;min-height:100dvh;background:linear-gradient(180deg,#0B1D35 0%,#060E18 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;color:#fff">';
@@ -1866,64 +1828,19 @@ function signinH(){
     +'<span style="font-size:18px;font-weight:600;letter-spacing:.25em;color:rgba(255,255,255,.9);text-transform:uppercase">Volanti</span>'
   +'</div>';
 
-  var errBlock = lastError ? '<div style="background:rgba(239,68,68,.12);border:.5px solid rgba(239,68,68,.4);color:#fca5a5;font-size:12px;padding:8px 10px;border-radius:8px;margin-bottom:12px">'+esc(lastError)+'</div>' : '';
-  var inputStyle = 'width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:12px 14px;font-size:15px;color:#fff;font-family:inherit;margin-bottom:14px;box-sizing:border-box;outline:none';
-  var card;
+  var errBlock = lastError ? '<div style="background:rgba(239,68,68,.12);border:.5px solid rgba(239,68,68,.4);color:#fca5a5;font-size:12px;padding:8px 10px;border-radius:8px;margin-bottom:14px">'+esc(lastError)+'</div>' : '';
 
-  if(state === 'code' || state === 'verifying'){
-    var verifying = state === 'verifying';
-    card = '<div style="background:rgba(255,255,255,.04);border:.5px solid rgba(255,255,255,.08);border-radius:18px;padding:32px 24px;max-width:380px;width:100%;text-align:center">'
-      +'<div style="font-size:44px;margin-bottom:10px">🔐</div>'
-      +'<h1 style="font-size:20px;font-weight:700;margin:0 0 8px 0;color:#fff">Enter your code</h1>'
-      +'<p style="font-size:13px;color:rgba(255,255,255,.65);line-height:1.5;margin:0 0 2px 0">We emailed a 6-digit code to</p>'
-      +'<p style="font-size:14px;color:#5EEAD4;font-weight:600;margin:0 0 16px 0;word-break:break-all">'+esc(lastEmail)+'</p>'
-      +errBlock
-      +'<form onsubmit="event.preventDefault();signinVerify();return false;">'
-        +'<input id="signin-code" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" '
-          +(verifying?'disabled ':'')
-          +'placeholder="••••••" '
-          +'style="'+inputStyle+';text-align:center;font-size:26px;letter-spacing:.35em;font-weight:700" '
-          +'oninput="if(this.value.length===6)signinVerify()">'
-        +'<button type="submit" '+(verifying?'disabled':'')+' style="width:100%;padding:12px;background:'+(verifying?'rgba(11,165,176,.4)':'linear-gradient(135deg,#0BA5B0,#077A84)')+';border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:'+(verifying?'wait':'pointer')+';font-family:inherit">'
-          +(verifying?'Verifying…':'Verify & sign in')
-        +'</button>'
-      +'</form>'
-      +'<div style="display:flex;justify-content:center;gap:18px;margin-top:16px">'
-        +'<button onclick="signinResend()" style="background:none;border:none;color:#5EEAD4;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;padding:4px 0">Resend code</button>'
-        +'<button onclick="signinReset()" style="background:none;border:none;color:rgba(255,255,255,.55);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;padding:4px 0">Different email</button>'
-      +'</div>'
-    +'</div>';
-  } else {
-    var sending = state === 'sending';
-    var gBtn = '<button onclick="signinGoogle()" '+(sending?'disabled ':'')
-      +'style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:12px;background:#fff;border:none;border-radius:10px;color:#1f2937;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:18px">'
-      +'<svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.2 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.2 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C41 35.4 44 30.2 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>'
-      +'Continue with Google</button>';
-    card = '<div style="background:rgba(255,255,255,.04);border:.5px solid rgba(255,255,255,.08);border-radius:18px;padding:32px 24px;max-width:380px;width:100%">'
-      +'<h1 style="font-size:22px;font-weight:700;margin:0 0 6px 0;color:#fff;text-align:center">Welcome aboard</h1>'
-      +'<p style="font-size:13px;color:rgba(255,255,255,.6);line-height:1.5;margin:0 0 22px 0;text-align:center">Sign in to manage your aircraft, track expenses, and collaborate with co-owners.</p>'
-      +errBlock
-      +gBtn
-      +'<div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">'
-        +'<span style="flex:1;height:1px;background:rgba(255,255,255,.12)"></span>'
-        +'<span style="font-size:11px;color:rgba(255,255,255,.45);font-weight:600">OR</span>'
-        +'<span style="flex:1;height:1px;background:rgba(255,255,255,.12)"></span>'
-      +'</div>'
-      +'<form onsubmit="event.preventDefault();signinSubmit();return false;">'
-        +'<label style="display:block;font-size:11px;font-weight:700;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Email address</label>'
-        +'<input id="signin-email" type="email" inputmode="email" autocomplete="email" autocapitalize="off" autocorrect="off" spellcheck="false" '
-          +'placeholder="you@example.com" value="'+esc(lastEmail)+'" '
-          +(sending?'disabled ':'')
-          +'style="'+inputStyle+'" '
-          +'onfocus="this.style.borderColor=\'rgba(11,165,176,.6)\'" '
-          +'onblur="this.style.borderColor=\'rgba(255,255,255,.12)\'">'
-        +'<button type="submit" '+(sending?'disabled':'')+' style="width:100%;padding:12px;background:'+(sending?'rgba(11,165,176,.4)':'linear-gradient(135deg,#0BA5B0,#077A84)')+';border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:'+(sending?'wait':'pointer')+';font-family:inherit;letter-spacing:.2px">'
-          +(sending?'Sending code…':'Email me a code →')
-        +'</button>'
-      +'</form>'
-      +'<p style="font-size:11px;color:rgba(255,255,255,.4);line-height:1.5;margin:18px 0 0 0;text-align:center">No password needed. We\'ll email you a 6-digit code.</p>'
-    +'</div>';
-  }
+  var card = '<div style="background:rgba(255,255,255,.04);border:.5px solid rgba(255,255,255,.08);border-radius:18px;padding:32px 24px;max-width:380px;width:100%">'
+    +'<h1 style="font-size:22px;font-weight:700;margin:0 0 6px 0;color:#fff;text-align:center">Welcome aboard</h1>'
+    +'<p style="font-size:13px;color:rgba(255,255,255,.6);line-height:1.5;margin:0 0 24px 0;text-align:center">Sign in to manage your aircraft, track expenses, and collaborate with co-owners.</p>'
+    +errBlock
+    +'<button onclick="signinGoogle()" '+(busy?'disabled ':'')
+      +'style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:13px;background:'+(busy?'rgba(255,255,255,.7)':'#fff')+';border:none;border-radius:10px;color:#1f2937;font-size:15px;font-weight:700;cursor:'+(busy?'wait':'pointer')+';font-family:inherit">'
+      +'<svg width="19" height="19" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.2 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.2 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C41 35.4 44 30.2 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>'
+      +(busy?'Opening Google…':'Continue with Google')
+    +'</button>'
+    +'<p style="font-size:11px;color:rgba(255,255,255,.4);line-height:1.5;margin:18px 0 0 0;text-align:center">One tap with your Google account. No passwords, no codes.</p>'
+  +'</div>';
 
   var foot = '<div style="margin-top:24px;font-size:11px;color:rgba(255,255,255,.4);text-align:center;max-width:380px">'
     +'By signing in you agree that Volanti is a co-ownership management tool and is <b>not for navigation</b>. Always cross-check with authoritative flight planning tools before flight.'
@@ -1935,73 +1852,15 @@ function signinH(){
 // Google OAuth entry point
 async function signinGoogle(){
   window._signinError='';
+  window._signinState='sending';
+  go('signin');
   var result = await signInWithGoogle();
   if(!result.ok){
+    window._signinState='';
     window._signinError = result.error || 'Google sign-in failed';
     go('signin');
   }
-  // On success the browser redirects to Google, then back — nothing to do here.
-}
-
-// Send the 6-digit code
-async function signinSubmit(){
-  var emailEl = $('signin-email');
-  if(!emailEl) return;
-  var email = String(emailEl.value||'').trim().toLowerCase();
-  if(!email){ window._signinError='Please enter your email address'; go('signin'); return; }
-  window._signinEmail = email;
-  window._signinError = '';
-  window._signinState = 'sending';
-  go('signin');
-  var result = await signInSendCode(email);
-  if(result.ok){
-    window._signinState = 'code';
-    window._signinError = '';
-  } else {
-    window._signinState = 'form';
-    window._signinError = result.error || 'Could not send code. Please try again.';
-  }
-  go('signin');
-  if(result.ok) setTimeout(function(){var c=$('signin-code');if(c)c.focus();},150);
-}
-
-// Verify the entered code
-async function signinVerify(){
-  var codeEl = $('signin-code');
-  if(!codeEl) return;
-  var code = String(codeEl.value||'').replace(/\D/g,'');
-  if(code.length!==6){ window._signinError='Enter the 6-digit code from your email'; go('signin'); return; }
-  window._signinError = '';
-  window._signinState = 'verifying';
-  go('signin');
-  var result = await signInVerifyCode(window._signinEmail, code);
-  if(result.ok){
-    // auth-changed event will route to dashboard
-    window._signinState = 'form';
-    window._signinError = '';
-  } else {
-    window._signinState = 'code';
-    window._signinError = result.error || 'Invalid or expired code';
-    go('signin');
-    setTimeout(function(){var c=$('signin-code');if(c){c.value='';c.focus();}},150);
-  }
-}
-
-// Resend the code to the same email
-async function signinResend(){
-  if(!window._signinEmail) { signinReset(); return; }
-  window._signinError='';
-  var result = await signInSendCode(window._signinEmail);
-  window._signinError = result.ok ? '' : (result.error||'Could not resend');
-  if(result.ok && typeof showToast==='function') showToast('✓ New code sent','ok');
-  go('signin');
-}
-
-// Back to the email form
-function signinReset(){
-  window._signinState = 'form';
-  window._signinError = '';
-  go('signin');
+  // On success the browser redirects to Google, then back — nothing else to do.
 }
 
 // When auth state changes (e.g., magic link redirects back to app with a session),
